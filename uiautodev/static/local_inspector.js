@@ -1,12 +1,9 @@
-// uiautodev/static/local_inspector.js
-
-// NO ES6 IMPORTS NEEDED FOR CODEMIRROR 5 when loaded via <script> tags
+// static/local_inspector.js
 
 document.addEventListener("DOMContentLoaded", function () {
   console.log("local_inspector.js: DOMContentLoaded event fired");
 
   // --- DOM Elements ---
-  // (These are identical to your original file)
   const messageArea = document.getElementById("message-area");
   const deviceSelect = document.getElementById("device-select");
   const overlayCanvas = document.getElementById("overlayCanvas");
@@ -44,11 +41,10 @@ document.addEventListener("DOMContentLoaded", function () {
     "hierarchy-search-input",
   );
 
-  // --- CodeMirror 5 Editor Instance ---
-  let pythonCmEditor = null; // Will hold the CodeMirror 5 instance
+  // pythonCmEditor is now managed by PythonConsoleManager
+  // let pythonCmEditor = null;
 
   // --- State ---
-  // (Identical to your original file)
   let currentDeviceSerial = null;
   let devices = [];
   let currentHierarchyData = null;
@@ -61,10 +57,6 @@ document.addEventListener("DOMContentLoaded", function () {
   let nodesByKey = {};
   const DEBUG_ELEMENT_FINDING = true;
   let canvasTooltip = null;
-
-  // --- All your original functions remain structurally the same, except for: ---
-  // 1. CodeMirror 5 initialization in `initialize()`
-  // 2. Getting value from CodeMirror 5 in `handleRunPythonCode()`
 
   function updateMessage(text, type = "info") {
     if (messageArea) {
@@ -91,33 +83,31 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function createCanvasTooltip() {
-    // (Identical to your original code)
     if (!document.getElementById("canvas-tooltip-id")) {
       canvasTooltip = document.createElement("div");
       canvasTooltip.id = "canvas-tooltip-id";
-      canvasTooltip.style.position = "absolute";
-      canvasTooltip.style.display = "none";
-      canvasTooltip.style.backgroundColor = "rgba(0, 0, 0, 0.85)";
-      canvasTooltip.style.color = "#f0f0f0";
-      canvasTooltip.style.padding = "8px 10px";
-      canvasTooltip.style.borderRadius = "5px";
-      canvasTooltip.style.fontSize = "12px";
-      canvasTooltip.style.fontFamily =
-        "Menlo, Monaco, Consolas, 'Courier New', monospace";
-      canvasTooltip.style.pointerEvents = "none";
-      canvasTooltip.style.zIndex = "10001";
-      canvasTooltip.style.border = "1px solid #555";
-      canvasTooltip.style.maxWidth = "380px";
-      canvasTooltip.style.maxHeight = "220px";
-      canvasTooltip.style.overflowY = "auto";
-      canvasTooltip.style.wordBreak = "break-all";
-      canvasTooltip.style.lineHeight = "1.5";
+      Object.assign(canvasTooltip.style, {
+        position: "absolute",
+        display: "none",
+        backgroundColor: "rgba(0,0,0,0.85)",
+        color: "#f0f0f0",
+        padding: "8px 10px",
+        borderRadius: "5px",
+        fontSize: "12px",
+        fontFamily: "Menlo, Monaco, Consolas, 'Courier New', monospace",
+        pointerEvents: "none",
+        zIndex: "10001",
+        border: "1px solid #555",
+        maxWidth: "380px",
+        maxHeight: "220px",
+        overflowY: "auto",
+        wordBreak: "break-all",
+        lineHeight: "1.5",
+      });
       if (deviceScreenContainer) {
         deviceScreenContainer.appendChild(canvasTooltip);
         if (DEBUG_ELEMENT_FINDING)
-          console.log(
-            "Tooltip: Created and appended to deviceScreenContainer.",
-          );
+          console.log("Tooltip: Created and appended.");
       } else {
         console.error("CRITICAL: deviceScreenContainer not found for tooltip.");
       }
@@ -132,7 +122,6 @@ document.addEventListener("DOMContentLoaded", function () {
     body = null,
     expectBlob = false,
   ) {
-    // (Identical to your original code)
     const requestOptions = {
       method: method.toUpperCase(),
       cache: "no-cache",
@@ -178,7 +167,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function setupOverlayCanvas() {
-    // (Identical to your original code)
     if (
       !deviceScreenImg ||
       !overlayCanvas ||
@@ -187,12 +175,14 @@ document.addEventListener("DOMContentLoaded", function () {
     )
       return;
     if (deviceScreenImg.naturalWidth === 0 || !deviceScreenImg.complete) {
-      if (!deviceScreenImg.onloadAttached) {
-        deviceScreenImg.onload = () => {
-          deviceScreenImg.onloadAttached = false;
+      if (!deviceScreenImg.dataset.onloadAttached) {
+        const handler = () => {
+          delete deviceScreenImg.dataset.onloadAttached;
           setupOverlayCanvas();
+          deviceScreenImg.removeEventListener("load", handler);
         };
-        deviceScreenImg.onloadAttached = true;
+        deviceScreenImg.addEventListener("load", handler);
+        deviceScreenImg.dataset.onloadAttached = "true";
       }
       return;
     }
@@ -220,7 +210,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function drawNodeOverlays() {
-    // (Identical to your original code)
     if (!overlayCtx || !overlayCanvas || overlayCanvas.width === 0) return;
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     if (!currentHierarchyData) {
@@ -246,9 +235,9 @@ document.addEventListener("DOMContentLoaded", function () {
         if (selectedNode && selectedNode.key === node.key) {
           overlayCtx.strokeStyle = "rgba(255,0,0,0.9)";
           overlayCtx.lineWidth = 2;
-          if (DEBUG_ELEMENT_FINDING)
+          if (DEBUG_ELEMENT_FINDING && node.name)
             console.log(
-              `DRAW_SELECTED: Highlighting selected ${node.name} (Key:${node.key}) at canvas [${rectX.toFixed(1)},${rectY.toFixed(1)},${rectW.toFixed(1)},${rectH.toFixed(1)}]`,
+              `DRAW_SELECTED: Highlighting selected ${node.name} (Key:${node.key})`,
             );
         } else if (hoveredNode && hoveredNode.key === node.key) {
           overlayCtx.strokeStyle = "rgba(0,120,255,0.9)";
@@ -265,8 +254,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function updateAndShowTooltip(node, pageX, pageY) {
-    /* (Identical to your original code) */ if (!canvasTooltip)
-      createCanvasTooltip();
+    if (!canvasTooltip) createCanvasTooltip();
     if (!canvasTooltip || !node || !deviceScreenContainer) {
       if (DEBUG_ELEMENT_FINDING)
         console.warn("Tooltip: updateAndShowTooltip - Prerequisites not met.");
@@ -318,13 +306,14 @@ document.addEventListener("DOMContentLoaded", function () {
       hideTooltip();
     }
   }
+
   function hideTooltip() {
-    /* (Identical to your original code) */ if (canvasTooltip) {
+    if (canvasTooltip) {
       canvasTooltip.style.display = "none";
     }
   }
   function startScreenshotAutoRefresh() {
-    /* (Identical to your original code) */ if (currentDeviceSerial) {
+    if (currentDeviceSerial) {
       fetchAndDisplayScreenshot();
       if (DEBUG_ELEMENT_FINDING)
         console.log(
@@ -333,17 +322,15 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
   function stopScreenshotAutoRefresh() {
-    /* (Identical to your original code) */ if (DEBUG_ELEMENT_FINDING)
+    if (DEBUG_ELEMENT_FINDING)
       console.log(
         "SCREENSHOT_REFRESH: stopScreenshotAutoRefresh called (no active interval expected).",
       );
   }
 
   async function loadDeviceList() {
-    /* (Identical to your original code) */ updateMessage(
-      "Loading devices...",
-      "info",
-    );
+    console.log("loadDeviceList: Attempting to load devices...");
+    updateMessage("Loading devices...", "info");
     if (deviceSelect) deviceSelect.disabled = true;
     try {
       if (DEBUG_ELEMENT_FINDING)
@@ -377,10 +364,16 @@ document.addEventListener("DOMContentLoaded", function () {
         clearDeviceInfo();
       }
       if (deviceSelect.value) {
+        console.log(
+          "loadDeviceList: Device selected in dropdown, calling handleDeviceSelectionChange:",
+          deviceSelect.value,
+        );
         await handleDeviceSelectionChange();
       } else {
         if (DEBUG_ELEMENT_FINDING)
-          console.log("loadDeviceList: No device selected in dropdown.");
+          console.log(
+            "loadDeviceList: No device selected in dropdown after populating.",
+          );
         clearDeviceInfo();
       }
     } catch (e) {
@@ -397,8 +390,9 @@ document.addEventListener("DOMContentLoaded", function () {
       if (DEBUG_ELEMENT_FINDING) console.log("loadDeviceList: Finished.");
     }
   }
+
   function populateDeviceDropdown(deviceData) {
-    /* (Identical to your original code) */ if (!deviceSelect) {
+    if (!deviceSelect) {
       console.error("populateDeviceDropdown: deviceSelect element not found!");
       return;
     }
@@ -414,8 +408,9 @@ document.addEventListener("DOMContentLoaded", function () {
       deviceSelect.appendChild(o);
     });
   }
+
   function clearDeviceInfo() {
-    /* (Identical to your original code) */ stopScreenshotAutoRefresh();
+    stopScreenshotAutoRefresh();
     if (overlayCtx)
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     hideTooltip();
@@ -444,15 +439,16 @@ document.addEventListener("DOMContentLoaded", function () {
     if (generatedXpathEl) generatedXpathEl.value = "";
     updateMessage("No device selected or device disconnected.", "info");
   }
+
   async function handleDeviceSelectionChange() {
-    /* (Identical to your original code) */ if (!deviceSelect) {
+    if (!deviceSelect) {
       console.error("handleDeviceSelectionChange: deviceSelect is null!");
       return;
     }
     const newSerial = deviceSelect.value;
     if (DEBUG_ELEMENT_FINDING)
       console.log(
-        `handleDeviceSelectionChange: Value changed to "${newSerial}".`,
+        `handleDeviceSelectionChange: Value changed to "${newSerial}". Current serial: ${currentDeviceSerial}`,
       );
     if (!newSerial) {
       console.log(
@@ -490,6 +486,9 @@ document.addEventListener("DOMContentLoaded", function () {
       } else {
         if (DEBUG_ELEMENT_FINDING)
           console.log("handleDeviceSelectionChange: Hierarchy tab not active.");
+        if (hierarchyTreeViewEl)
+          hierarchyTreeViewEl.innerHTML =
+            "Select a device and load hierarchy...";
       }
     } catch (error) {
       console.error(
@@ -500,12 +499,9 @@ document.addEventListener("DOMContentLoaded", function () {
       clearDeviceInfo();
     }
   }
+
   async function fetchAndDisplayScreenshot() {
-    /* (Identical to your original code) */ if (
-      !currentDeviceSerial ||
-      !deviceScreenImg
-    )
-      return;
+    if (!currentDeviceSerial || !deviceScreenImg) return;
     updateMessage("Fetching screenshot...", "info");
     deviceScreenImg.removeAttribute("src");
     deviceScreenImg.src =
@@ -520,56 +516,62 @@ document.addEventListener("DOMContentLoaded", function () {
         null,
         true,
       );
+      const prevLoadHandler = deviceScreenImg.onload;
+      const prevErrorHandler = deviceScreenImg.onerror;
+      if (typeof prevLoadHandler === "function")
+        deviceScreenImg.removeEventListener("load", prevLoadHandler);
+      if (typeof prevErrorHandler === "function")
+        deviceScreenImg.removeEventListener("error", prevErrorHandler);
       if (blob instanceof Blob && blob.size > 0) {
-        deviceScreenImg.onload = () => {
-          deviceScreenImg.onloadAttached = false;
+        const imgLoadHandler = () => {
           actualDeviceWidth = deviceScreenImg.naturalWidth;
           actualDeviceHeight = deviceScreenImg.naturalHeight;
           if (DEBUG_ELEMENT_FINDING)
             console.log(
-              "SCREENSHOT: Loaded, actualDeviceWidth:",
+              "SCREENSHOT: Loaded,",
               actualDeviceWidth,
-              "actualDeviceHeight:",
               actualDeviceHeight,
             );
           setupOverlayCanvas();
           updateMessage("Screenshot updated.", "success", 2000);
+          deviceScreenImg.removeEventListener("load", imgLoadHandler);
+          deviceScreenImg.removeEventListener("error", imgErrorHandler);
         };
-        deviceScreenImg.onloadAttached = true;
-        deviceScreenImg.onerror = () => {
+        const imgErrorHandler = () => {
           deviceScreenImg.src =
             "https://placehold.co/320x680/777/eee?text=LoadErr";
           setupOverlayCanvas();
           updateMessage("Screenshot load error.", "error");
+          deviceScreenImg.removeEventListener("load", imgLoadHandler);
+          deviceScreenImg.removeEventListener("error", imgErrorHandler);
         };
+        deviceScreenImg.addEventListener("load", imgLoadHandler);
+        deviceScreenImg.addEventListener("error", imgErrorHandler);
         deviceScreenImg.src = URL.createObjectURL(blob);
       } else {
-        deviceScreenImg.onload = null;
         deviceScreenImg.src =
           "https://placehold.co/320x680/777/eee?text=NoData";
         setupOverlayCanvas();
         updateMessage("No screenshot data received.", "warning");
       }
     } catch (e) {
-      deviceScreenImg.onload = null;
       deviceScreenImg.src =
         "https://placehold.co/320x680/777/eee?text=FetchErr";
       setupOverlayCanvas();
       updateMessage("Screenshot fetch error.", "error");
     }
   }
+
   function buildNodesByKeyMap(node) {
-    /* (Identical to your original code) */ if (!node || !node.key) return;
+    if (!node || !node.key) return;
     nodesByKey[node.key] = node;
     if (node.children && node.children.length > 0) {
       node.children.forEach(buildNodesByKeyMap);
     }
   }
+
   async function fetchAndRenderHierarchy(expandAll = false) {
-    /* (Identical to your original code) */ if (
-      !currentDeviceSerial ||
-      !hierarchyTreeViewEl
-    ) {
+    if (!currentDeviceSerial || !hierarchyTreeViewEl) {
       if (DEBUG_ELEMENT_FINDING)
         console.warn("HIERARCHY: Pre-conditions for fetch not met.");
       return;
@@ -580,14 +582,9 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
     if (DEBUG_ELEMENT_FINDING)
-      console.log(
-        "HIERARCHY: Starting fetchAndRenderHierarchy for",
-        currentDeviceSerial,
-      );
+      console.log("HIERARCHY: Starting fetch for", currentDeviceSerial);
     isHierarchyLoading = true;
     hierarchyTreeViewEl.innerHTML = "Loading hierarchy...";
-    currentHierarchyData = null;
-    nodesByKey = {};
     updateMessage("Loading UI Hierarchy...", "info");
     if (overlayCtx)
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
@@ -604,18 +601,25 @@ document.addEventListener("DOMContentLoaded", function () {
           typeof hData.rect.width === "number" &&
           typeof hData.rect.height === "number"
         ) {
-          if (!actualDeviceWidth && hData.rect.width > 0)
-            actualDeviceWidth = hData.rect.x + hData.rect.width;
-          if (!actualDeviceHeight && hData.rect.height > 0)
-            actualDeviceHeight = hData.rect.y + hData.rect.height;
+          if (
+            (!actualDeviceWidth || actualDeviceWidth === 0) &&
+            hData.rect.width > 0
+          )
+            actualDeviceWidth = (hData.rect.x || 0) + hData.rect.width;
+          if (
+            (!actualDeviceHeight || actualDeviceHeight === 0) &&
+            hData.rect.height > 0
+          )
+            actualDeviceHeight = (hData.rect.y || 0) + hData.rect.height;
         }
         if (
           deviceScreenImg &&
           deviceScreenImg.naturalWidth === 0 &&
           actualDeviceWidth &&
           actualDeviceHeight
-        )
+        ) {
           setupOverlayCanvas();
+        }
         renderHierarchyTree(
           currentHierarchyData,
           hierarchyTreeViewEl,
@@ -625,11 +629,9 @@ document.addEventListener("DOMContentLoaded", function () {
         updateMessage("Hierarchy loaded.", "success", 2000);
         drawNodeOverlays();
         if (DEBUG_ELEMENT_FINDING)
-          console.log(
-            "HIERARCHY: Successfully fetched, rendered, and nodesByKey map built. currentHierarchyData is SET.",
-          );
+          console.log("HIERARCHY: Successfully fetched, rendered.");
       } else {
-        console.error("HIERARCHY: Failed to load/parse. Response:", hData);
+        console.error("HIERARCHY: Failed to load/parse.", hData);
         hierarchyTreeViewEl.innerHTML = "Failed to load hierarchy.";
         currentHierarchyData = null;
         updateMessage("Failed to load hierarchy.", "error");
@@ -645,13 +647,14 @@ document.addEventListener("DOMContentLoaded", function () {
         console.log("HIERARCHY: fetchAndRenderHierarchy finished.");
     }
   }
+
   function renderHierarchyTree(
     node,
     parentElement,
     isRootCall = false,
     expandAll = false,
   ) {
-    /* (Identical to your original code) */ if (!node) return;
+    if (!node) return;
     if (isRootCall && parentElement === hierarchyTreeViewEl) {
       parentElement.innerHTML = "";
     }
@@ -711,8 +714,9 @@ document.addEventListener("DOMContentLoaded", function () {
       li.appendChild(childUl);
     }
   }
+
   function handleTreeSelection(node) {
-    /* (Identical to your original code) */ if (!node || !node.key) {
+    if (!node || !node.key) {
       console.warn("handleTreeSelection: Invalid node or key.", node);
       return;
     }
@@ -741,27 +745,17 @@ document.addEventListener("DOMContentLoaded", function () {
       expandAndScrollToNode(node.key);
     } else {
       if (DEBUG_ELEMENT_FINDING)
-        console.warn(
-          "TREE_SELECTION: Could not find li for key",
-          node.key,
-          "to apply selection class.",
-        );
+        console.warn("TREE_SELECTION: Could not find li for key", node.key);
     }
   }
+
   function expandAndScrollToNode(nodeKey) {
-    /* (Identical to your original code) */ if (
-      !nodeKey ||
-      !hierarchyTreeViewEl
-    )
-      return;
+    if (!nodeKey || !hierarchyTreeViewEl) return;
     const safeNodeKey = String(nodeKey).replace(/[^a-zA-Z0-9-_]/g, "_");
     const targetLi = document.getElementById(`li-key-${safeNodeKey}`);
     if (targetLi) {
       if (DEBUG_ELEMENT_FINDING)
-        console.log(
-          "HIERARCHY_SCROLL: Scrolling to and expanding for key:",
-          nodeKey,
-        );
+        console.log("HIERARCHY_SCROLL: Scrolling for key:", nodeKey);
       let current = targetLi.parentElement;
       while (
         current &&
@@ -772,13 +766,16 @@ document.addEventListener("DOMContentLoaded", function () {
           current.classList.remove("collapsed");
           const parentLiOfUl = current.parentElement;
           if (parentLiOfUl) {
-            const toggle = parentLiOfUl.querySelector(".toggle:not(.spacer)");
+            const toggle = parentLiOfUl.querySelector(
+              ".node-content > .toggle:not(.spacer)",
+            );
             if (toggle) toggle.textContent = "▼";
           }
         }
         if (
           !current.parentElement ||
-          current.parentElement === hierarchyTreeViewEl
+          !current.parentElement.parentElement ||
+          current.parentElement.parentElement === hierarchyTreeViewEl
         )
           break;
         current = current.parentElement.parentElement;
@@ -790,23 +787,18 @@ document.addEventListener("DOMContentLoaded", function () {
           inline: "center",
         });
         if (DEBUG_ELEMENT_FINDING)
-          console.log(
-            "HIERARCHY_SCROLL: Scrolled to",
-            targetLi.id,
-            "with inline:center",
-          );
+          console.log("HIERARCHY_SCROLL: Scrolled to", targetLi.id);
       }, 50);
     } else {
       if (DEBUG_ELEMENT_FINDING)
-        console.warn(
-          "HIERARCHY_SCROLL: Could not find li element for key:",
-          nodeKey,
-        );
+        console.warn("HIERARCHY_SCROLL: Could not find li for key:", nodeKey);
     }
   }
+
   function displayNodeProperties(node) {
-    /* (Identical to your original code) */ const elementPropertiesViewEl =
-      document.getElementById("element-properties-view");
+    const elementPropertiesViewEl = document.getElementById(
+      "element-properties-view",
+    );
     const generatedXpathEl = document.getElementById("generated-xpath");
     if (!elementPropertiesViewEl || !generatedXpathEl) return;
     if (!node) {
@@ -814,10 +806,11 @@ document.addEventListener("DOMContentLoaded", function () {
       generatedXpathEl.value = "";
       return;
     }
-    let html = "<table>";
-    if (node.properties)
+    let html = "<table class='properties-panel'>";
+    if (node.properties) {
       for (const k in node.properties)
         html += `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(String(node.properties[k]))}</td></tr>`;
+    }
     if (node.name)
       html += `<tr><th>class</th><td>${escapeHtml(node.name)}</td></tr>`;
     if (node.rect)
@@ -828,8 +821,9 @@ document.addEventListener("DOMContentLoaded", function () {
     elementPropertiesViewEl.innerHTML = html;
     generatedXpathEl.value = generateBasicXPath(node);
   }
+
   function escapeHtml(unsafe) {
-    /* (Identical to your original code) */ return String(unsafe)
+    return String(unsafe)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
@@ -837,8 +831,7 @@ document.addEventListener("DOMContentLoaded", function () {
       .replace(/'/g, "&#039;");
   }
   function generateBasicXPath(node) {
-    /* (Identical to your original code) */ if (!node || !node.properties)
-      return "";
+    if (!node || !node.properties) return "";
     const p = node.properties;
     const c = escapeHtml(p["class"] || node.name || "*");
     if (p["resource-id"])
@@ -850,15 +843,11 @@ document.addEventListener("DOMContentLoaded", function () {
     return `//${c}`;
   }
   const KNOWN_OVERLAY_IDS = [
-    /* (Identical to your original code) */ "com.instagram.androie:id/overlay_layout_container",
+    "com.instagram.androie:id/overlay_layout_container",
     "com.instagram.androie:id/quick_capture_root_container",
   ];
   function findBestElementFromCandidates(candidates, relX, relY) {
-    /* (Identical to your original code) */ if (
-      !candidates ||
-      candidates.length === 0
-    )
-      return null;
+    if (!candidates || candidates.length === 0) return null;
     if (candidates.length === 1) return candidates[0];
     candidates.sort((a, b) => {
       const aBoundsValid =
@@ -918,7 +907,7 @@ document.addEventListener("DOMContentLoaded", function () {
     return candidates[0];
   }
   function findAllElementsRecursive(node, relX, relY, candidatesList) {
-    /* (Identical to your original code) */ if (!node) return;
+    if (!node) return;
     if (
       !node.bounds ||
       !Array.isArray(node.bounds) ||
@@ -944,7 +933,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
   function findElementAtCanvasCoordinates(canvasX, canvasY) {
-    /* (Identical to your original code) */ if (DEBUG_ELEMENT_FINDING)
+    if (DEBUG_ELEMENT_FINDING)
       console.log(
         `findElementAtCanvasCoordinates: Entry (X:${canvasX.toFixed(1)}, Y:${canvasY.toFixed(1)}). currentHierarchyData is ${currentHierarchyData ? "PRESENT" : "NULL"}`,
       );
@@ -1010,12 +999,7 @@ document.addEventListener("DOMContentLoaded", function () {
     return bestFound;
   }
   function performHierarchySearch(searchText) {
-    /* (Identical to your original code) */ if (
-      !hierarchyTreeViewEl ||
-      !currentHierarchyData ||
-      !nodesByKey
-    )
-      return;
+    if (!hierarchyTreeViewEl || !currentHierarchyData || !nodesByKey) return;
     const searchTerm = searchText.toLowerCase().trim();
     const allLiElements =
       hierarchyTreeViewEl.querySelectorAll("li[id^='li-key-']");
@@ -1075,32 +1059,30 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log(`SEARCH: No matches found for "${searchTerm}".`);
     }
   }
+
   if (overlayCanvas) {
-    /* (Identical to your original code) */ overlayCanvas.addEventListener(
-      "mousemove",
-      function (event) {
-        if (!currentHierarchyData || !overlayCtx || isHierarchyLoading) return;
-        const rect = overlayCanvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        const nodeUnderMouse = findElementAtCanvasCoordinates(x, y);
-        if (hoveredNode?.key !== nodeUnderMouse?.key) {
-          hoveredNode = nodeUnderMouse;
-          drawNodeOverlays();
-          if (hoveredNode) {
-            displayNodeProperties(hoveredNode);
-            updateAndShowTooltip(hoveredNode, event.pageX, event.pageY);
-          } else {
-            hideTooltip();
-            if (selectedNode) displayNodeProperties(selectedNode);
-            else if (elementPropertiesViewEl)
-              elementPropertiesViewEl.innerHTML = "Hover or select an element.";
-          }
-        } else if (hoveredNode && nodeUnderMouse) {
+    overlayCanvas.addEventListener("mousemove", function (event) {
+      if (!currentHierarchyData || !overlayCtx || isHierarchyLoading) return;
+      const rect = overlayCanvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const nodeUnderMouse = findElementAtCanvasCoordinates(x, y);
+      if (hoveredNode?.key !== nodeUnderMouse?.key) {
+        hoveredNode = nodeUnderMouse;
+        drawNodeOverlays();
+        if (hoveredNode) {
+          displayNodeProperties(hoveredNode);
           updateAndShowTooltip(hoveredNode, event.pageX, event.pageY);
+        } else {
+          hideTooltip();
+          if (selectedNode) displayNodeProperties(selectedNode);
+          else if (elementPropertiesViewEl)
+            elementPropertiesViewEl.innerHTML = "Hover or select an element.";
         }
-      },
-    );
+      } else if (hoveredNode && nodeUnderMouse) {
+        updateAndShowTooltip(hoveredNode, event.pageX, event.pageY);
+      }
+    });
     overlayCanvas.addEventListener("mouseleave", function () {
       hideTooltip();
       if (hoveredNode) {
@@ -1150,16 +1132,20 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // MODIFIED: handleRunPythonCode for CodeMirror 5
   async function handleRunPythonCode() {
     const pythonOutput = document.getElementById("interactive-python-output");
-
-    if (!pythonCmEditor) {
-      // Check the CodeMirror 5 instance
-      console.error("CodeMirror 5 editor (pythonCmEditor) is not initialized.");
-      alert("Python editor is not ready. Please wait or refresh.");
+    let code = "";
+    if (
+      window.PythonConsoleManager &&
+      typeof window.PythonConsoleManager.getCode === "function"
+    ) {
+      code = window.PythonConsoleManager.getCode();
+    } else {
+      console.error("PythonConsoleManager or getCode method is not available.");
+      alert("Python editor is not properly initialized.");
       return;
     }
+
     if (!currentDeviceSerial) {
       alert("Please select a device first to run Python code.");
       return;
@@ -1170,9 +1156,6 @@ document.addEventListener("DOMContentLoaded", function () {
       );
       return;
     }
-
-    const code = pythonCmEditor.getValue(); // Get code from CodeMirror 5 instance
-
     if (!code.trim()) {
       alert("Please enter Python code to run.");
       return;
@@ -1190,7 +1173,7 @@ document.addEventListener("DOMContentLoaded", function () {
         responseData !== null &&
         responseData.hasOwnProperty("result")
           ? String(responseData.result)
-          : String(responseData); // Fallback for plain text or other structures
+          : String(responseData);
       console.log("Python execution output:", pythonOutput.textContent);
     } catch (e) {
       pythonOutput.textContent = `Error executing Python: ${e.message}`;
@@ -1199,7 +1182,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function sendDeviceCommand(commandName) {
-    /* (Identical to your original code) */ if (!currentDeviceSerial) {
+    if (!currentDeviceSerial) {
       alert("Select device.");
       return;
     }
@@ -1227,81 +1210,40 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function initialize() {
-    console.log(
-      "local_inspector.js: Initializing application with CodeMirror 5...",
-    );
+    console.log("local_inspector.js: Initializing application...");
     updateMessage("Initializing UI...", "info");
-    createCanvasTooltip(); // Original call
+    createCanvasTooltip();
 
-    // --- Initialize CodeMirror 5 ---
-    const pythonTextarea = document.getElementById("interactive-python-editor");
-    if (pythonTextarea) {
-      if (typeof CodeMirror !== "undefined") {
-        // Check if CodeMirror global is available
-        try {
-          pythonCmEditor = CodeMirror.fromTextArea(pythonTextarea, {
-            lineNumbers: true,
-            mode: "python",
-            keyMap: "vim", // Enable Vim keybindings
-            theme: "material-darker", // Match the CSS theme linked in HTML
-            matchBrackets: true, // Addon: highlight matching brackets
-            styleActiveLine: true, // Addon: highlight the active line
-            // value: "# Python code here\nprint('Hello from CodeMirror 5!')\n# Access device with 'd'", // Initial content can be set here or from textarea
-            // placeholder: "Enter Python code here (e.g., print(d.info) or d.shell('ls'))" // Placeholder for CM5 is often via an overlay addon or CSS trickery if not native
-          });
-          // For CM5, placeholder is often set if textarea has it, or via an addon.
-          // If textarea placeholder doesn't carry over, you might need a CSS solution or specific CM5 placeholder addon if one exists.
-          // Setting an initial value:
-          pythonCmEditor.setValue(
-            "# Python code here\nprint('Hello from CodeMirror 5!')\n# Access device with 'd', e.g., print(d.info)",
-          );
-
-          console.log("CodeMirror 5 editor initialized successfully.");
-          // Refresh CM5 if it was initialized while its container tab was hidden
-          const pythonTab = document.getElementById("python-tab-content");
-          if (
-            pythonTab &&
-            pythonCmEditor &&
-            !pythonTab.classList.contains("active")
-          ) {
-            // If you switch to the tab later, CM might need a refresh.
-            // This can be handled in window.openTab
-          } else if (
-            pythonTab &&
-            pythonCmEditor &&
-            pythonTab.classList.contains("active")
-          ) {
-            pythonCmEditor.refresh(); // Refresh if tab is already active
-          }
-        } catch (e) {
-          console.error("Failed to initialize CodeMirror 5:", e);
-          pythonTextarea.value =
-            "Error initializing Python code editor. Check console."; // Fallback to textarea
-          updateMessage(
-            "Failed to initialize Python editor. See console.",
-            "error",
-          );
-        }
-      } else {
-        console.error("CodeMirror 5 library not loaded!");
-        updateMessage(
-          "CodeMirror library failed to load. Python editor unavailable.",
-          "error",
-        );
-        if (pythonTextarea)
-          pythonTextarea.value = "CodeMirror library failed to load.";
-      }
+    if (
+      window.PythonConsoleManager &&
+      typeof window.PythonConsoleManager.init === "function"
+    ) {
+      console.log(
+        "local_inspector.js: Initializing Python Console via PythonConsoleManager...",
+      );
+      window.PythonConsoleManager.init("interactive-python-editor", {
+        callBackend: callBackend,
+        getDeviceSerial: function () {
+          return currentDeviceSerial;
+        },
+        updateMessage: updateMessage,
+      });
     } else {
       console.error(
-        "Python editor textarea (#interactive-python-editor) not found!",
+        "PythonConsoleManager is not available at initialize. Python editor will not be set up.",
       );
       updateMessage(
-        "Python editor UI element missing, cannot initialize editor.",
+        "Python console module failed to load or initialize correctly.",
         "error",
       );
+      const pythonTextarea = document.getElementById(
+        "interactive-python-editor",
+      );
+      if (pythonTextarea)
+        pythonTextarea.value =
+          "Python Console module failed to load. Completions/VIM will not work.";
     }
 
-    // Original event listeners and setup calls
     if (deviceSelect) {
       console.log("Calling loadDeviceList from initialize...");
       loadDeviceList();
@@ -1311,7 +1253,6 @@ document.addEventListener("DOMContentLoaded", function () {
         "error",
       );
     }
-
     window.addEventListener("resize", setupOverlayCanvas);
     if (deviceScreenImg) {
       if (!deviceScreenImg.onloadAttachedToInspector) {
@@ -1375,7 +1316,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   if (typeof window.openTab !== "function") {
-    /* (Identical to your original code for window.openTab) */
     console.log("local_inspector.js: Defining window.openTab");
     window.openTab = function (evt, tabName) {
       console.log(`window.openTab called for: ${tabName}`);
@@ -1424,17 +1364,17 @@ document.addEventListener("DOMContentLoaded", function () {
           );
         fetchAndRenderHierarchy(true);
       }
-      // For CodeMirror 5, refresh if the tab becomes visible
-      if (actTab && actTab.id === "python-tab-content" && pythonCmEditor) {
-        setTimeout(() => {
-          if (pythonCmEditor) {
-            pythonCmEditor.refresh(); // Crucial for CM5 when shown after being hidden
-            // pythonCmEditor.focus(); // Optionally focus
-            console.log(
-              "CodeMirror 5 instance refreshed and focused on tab open.",
-            );
-          }
-        }, 50); // A small delay can sometimes help ensure layout is complete
+
+      if (
+        actTab &&
+        actTab.id === "python-tab-content" &&
+        window.PythonConsoleManager &&
+        typeof window.PythonConsoleManager.refresh === "function"
+      ) {
+        console.log(
+          "local_inspector.js: Refreshing Python console via PythonConsoleManager.",
+        );
+        window.PythonConsoleManager.refresh();
       }
     };
   } else {
@@ -1442,9 +1382,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function initializeDefaultTab() {
-    /* (Identical to your original code) */ console.log(
-      "local_inspector.js: Initializing default tab...",
-    );
+    console.log("local_inspector.js: Initializing default tab...");
     const defaultTabNameFromHTML = document
       .querySelector("#panel-hierarchy-code .tab-button.active")
       ?.getAttribute("onclick")
@@ -1488,7 +1426,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   try {
-    /* (Identical to your original code) */ initialize();
+    initialize();
     initializeDefaultTab();
     console.log("local_inspector.js: Initialization sequence complete.");
   } catch (e) {
