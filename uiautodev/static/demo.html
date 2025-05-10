@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local App Inspector</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; background-color: #f4f4f4; }
+        header { background-color: #333; color: white; padding: 10px 20px; text-align: center; }
+        .container { display: flex; flex-grow: 1; overflow: hidden; padding: 10px; gap: 10px; }
+        
+        /* --- MODIFIED: Slimmer left panel width --- */
+        .left-panel { 
+            width: 35%; /* Slimmed down from 50% */
+            min-width: 320px; /* Ensure it doesn't get too crushed */
+            padding: 10px; 
+            border-right: 1px solid #ccc; 
+            background-color: #fff; 
+            overflow-y: auto; 
+            display: flex; 
+            flex-direction: column; 
+            border-radius: 5px; 
+            box-shadow: 0 0 5px rgba(0,0,0,0.1); 
+            position: relative; 
+        }
+        /* --- MODIFIED: Wider right panel --- */
+        .right-panel { 
+            width: 65%; /* Increased from 50% */
+            padding: 10px; 
+            background-color: #fff; 
+            display: flex; 
+            flex-direction: column; 
+            border-radius: 5px; 
+            box-shadow: 0 0 5px rgba(0,0,0,0.1); 
+        }
+        
+        .panel-title { font-size: 1.2em; margin-bottom: 10px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px;}
+
+        /* --- MODIFIED: Device toggle styles --- */
+        .device-toggle-menu {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            display: none; /* Hidden by default */
+        }
+        .device-toggle-menu.visible {
+            display: block;
+        }
+        #toggle-device-menu-btn {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+        }
+        #toggle-device-menu-btn:hover {
+            background-color: #5a6268;
+        }
+        .device-selection select { width: 100%; padding: 8px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ddd;}
+        /* .device-info removed as per request */
+
+        .device-screen-container {
+            text-align: center;
+            margin-bottom:10px;
+            flex-grow: 1; 
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            min-height: 250px; /* Adjusted min-height */
+            position: relative; 
+        }
+        .device-screen-container img {
+            max-width: 100%;
+            max-height: 550px; /* Adjusted max-height, can be tuned */
+            height: auto;
+            border: 1px solid #ddd;
+            background-color: #e9e9e9;
+            border-radius: 3px;
+            cursor: crosshair; 
+        }
+        #highlight-box {
+            position: absolute;
+            border: 2px solid red;
+            box-sizing: border-box;
+            pointer-events: none; 
+            display: none; 
+        }
+        .device-controls { text-align: center; padding-top: 10px; border-top: 1px solid #eee; }
+        .device-controls button {
+            padding: 8px 12px; margin: 5px; border: none; background-color: #5cb85c;
+            color: white; border-radius: 4px; cursor: pointer; transition: background-color 0.3s ease;
+        }
+        .device-controls button:hover { background-color: #4cae4c; }
+
+        .tabs { display: flex; margin-bottom: 10px; border-bottom: 1px solid #ccc; }
+        .tab-button {
+            padding: 10px 15px; cursor: pointer; background-color: #e9e9e9;
+            border: 1px solid #ccc; 
+            border-bottom: none;
+            margin-right: 5px; border-radius: 4px 4px 0 0;
+            transition: background-color 0.3s ease;
+        }
+        .tab-button.active { background-color: #fff; font-weight: bold; border-bottom: 1px solid #fff; }
+        .tab-button:hover:not(.active) { background-color: #d8d8d8; }
+
+        .tab-content { display: none; flex-grow: 1; flex-direction: column; padding-top:10px; overflow: hidden; }
+        .tab-content.active { display: flex; }
+
+        .inspector-container { display: flex; flex-direction: row; flex-grow: 1; gap: 10px; overflow: hidden; }
+        .hierarchy-panel { width: 50%; overflow-y: auto; border: 1px solid #eee; padding: 5px; background-color: #fdfdfd; font-size: 0.9em;}
+        .properties-panel { width: 50%; overflow-y: auto; border: 1px solid #eee; padding: 5px; background-color: #fdfdfd;}
+        .hierarchy-panel ul { list-style-type: none; padding-left: 15px; margin: 0; }
+        .hierarchy-panel li { padding: 3px 0; cursor: pointer; }
+        .hierarchy-panel li:hover { background-color: #e6f7ff; }
+        .hierarchy-panel .selected-node { background-color: #cceeff; font-weight: bold; }
+        .hierarchy-panel .node-details { font-size: 0.8em; color: #777; margin-left: 5px; }
+        .properties-panel table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .properties-panel th, .properties-panel td { text-align: left; padding: 4px; border-bottom: 1px solid #eee; }
+        .properties-panel th { background-color: #f7f7f7; width: 30%; }
+        .properties-panel input[type="text"] { width: calc(100% - 8px); padding: 3px; border: 1px solid #ddd; border-radius: 3px; background-color: #f0f0f0; }
+        .inspector-controls { margin-bottom: 10px; }
+        .inspector-controls button { padding: 8px 12px; margin-right: 10px; }
+
+
+        #interactive-python-editor {
+            width: calc(100% - 22px); 
+            height: 250px; 
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            border-radius: 4px;
+            resize: vertical; 
+        }
+        #run-python-button {
+            padding: 10px 15px; background-color: #007bff; color: white;
+            border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px; align-self: flex-start;
+            transition: background-color 0.3s ease;
+        }
+        #run-python-button:hover { background-color: #0056b3; }
+        #interactive-python-output {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            background-color: #282c34; 
+            color: #abb2bf; 
+            padding: 10px;
+            white-space: pre-wrap; 
+            overflow-y: auto; 
+            font-family: 'Consolas', 'Menlo', 'Monaco', monospace; 
+            font-size: 13px;
+            border-radius: 4px;
+            min-height: 150px; 
+        }
+        #message-area { 
+            padding: 10px; 
+            background-color: #ffffe0; 
+            border: 1px solid #e6db55; 
+            margin: 0 10px 10px 10px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Local App Inspector (uiautodev)</h1>
+    </header>
+
+    <div id="message-area">Initializing...</div>
+
+    <div class="container">
+        <div class="left-panel">
+            <div class="panel-title">Device Control</div>
+            
+            <button id="toggle-device-menu-btn">Show Device Selection</button>
+            <div id="device-options-menu" class="device-toggle-menu">
+                <div class="device-selection">
+                    <label for="device-select">Select Device:</label>
+                    <select id="device-select">
+                        <option value="">Loading devices...</option>
+                    </select>
+                </div>
+                </div>
+            
+            <div class="device-screen-container">
+                <img id="current-device-screen" src="https://placehold.co/360x640/e9e9e9/777?text=Device+Screen" alt="Device Screen">
+                <div id="highlight-box"></div>
+            </div>
+            <div class="device-controls">
+                <button id="refresh-screen-btn" title="Refresh Screenshot">🔄 Refresh</button>
+                <button id="device-home-btn" title="Press Home Button">🏠 Home</button>
+                <button id="device-back-btn" title="Press Back Button">⬅️ Back</button>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="tabs">
+                <button class="tab-button" onclick="openTab(event, 'inspector-tab')">Inspector</button>
+                <button class="tab-button active" onclick="openTab(event, 'interactive-python-tab')">Interactive Python</button>
+            </div>
+
+            <div id="inspector-tab" class="tab-content">
+                <div class="panel-title">UI Inspector
+                    <button id="refresh-hierarchy-btn" style="float: right; font-size:0.8em; padding: 5px 10px;" title="Refresh UI Hierarchy">🔄 Refresh Hierarchy</button>
+                </div>
+                <div class="inspector-container">
+                    <div class="hierarchy-panel">
+                        <div id="hierarchy-tree-view">Hierarchy will load here...</div>
+                    </div>
+                    <div class="properties-panel">
+                        <h4>Selected Element Properties</h4>
+                        <div id="element-properties-view">Select an element from the screenshot or hierarchy.</div>
+                        <h4>Generated XPath</h4>
+                        <input type="text" id="generated-xpath" readonly placeholder="XPath will appear here">
+                    </div>
+                </div>
+            </div>
+
+            <div id="interactive-python-tab" class="tab-content">
+                <div class="panel-title">Python uiautomator2 Console</div>
+                <textarea id="interactive-python-editor" placeholder="Enter Python code here (e.g., print(d.info) or d.shell('ls'))"></textarea>
+                <button id="run-python-button">▶️ Run Code</button>
+                <div id="interactive-python-output"># Output will appear here...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/local_inspector.js"></script> 
+    <script>
+        // Tab switching function
+        function openTab(evt, tabName) {
+            var i, tabcontent, tabbuttons;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tabbuttons = document.getElementsByClassName("tab-button");
+            for (i = 0; i < tabbuttons.length; i++) {
+                tabbuttons[i].className = tabbuttons[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "flex";
+            if(evt && evt.currentTarget) {
+              evt.currentTarget.className += " active";
+            } else {
+              for (i = 0; i < tabbuttons.length; i++) {
+                const onclickAttr = tabbuttons[i].getAttribute('onclick');
+                if(onclickAttr && onclickAttr.includes("'" + tabName + "'")) { 
+                  tabbuttons[i].className += " active";
+                  break;
+                }
+              }
+            }
+        }
+
+        // Device selection toggle functionality
+        const toggleBtn = document.getElementById('toggle-device-menu-btn');
+        const deviceMenu = document.getElementById('device-options-menu');
+        toggleBtn.addEventListener('click', function() {
+            const isVisible = deviceMenu.classList.toggle('visible');
+            toggleBtn.textContent = isVisible ? 'Hide Device Selection' : 'Show Device Selection';
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const defaultTab = 'interactive-python-tab'; 
+            const defaultTabButton = Array.from(document.querySelectorAll('.tab-button')).find(btn => {
+                const onclickAttr = btn.getAttribute('onclick');
+                return onclickAttr && onclickAttr.includes("'" + defaultTab + "'");
+            });
+            openTab(defaultTabButton ? { currentTarget: defaultTabButton } : null, defaultTab); 
+            // The rest of the initialization logic (device loading etc.) is in local_inspector.js
+        });
+    </script>
+</body>
+</html>
+
