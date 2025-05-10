@@ -3,249 +3,401 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local App Inspector (uiautodev)</title>
+    <title>Local App Inspector (uiautodev) - Dark</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; background-color: #f4f4f4; }
-        header { background-color: #333; color: white; padding: 10px 20px; text-align: center; }
-        .container { display: flex; flex-grow: 1; overflow: hidden; padding: 10px; gap: 10px; }
-        
-        .left-panel { 
-            width: 35%; 
-            min-width: 320px; 
-            padding: 10px; 
-            border-right: 1px solid #ccc; 
-            background-color: #fff; 
-            overflow-y: auto; 
-            display: flex; 
-            flex-direction: column; 
-            border-radius: 5px; 
-            box-shadow: 0 0 5px rgba(0,0,0,0.1); 
-            position: relative; 
-        }
-        .right-panel { 
-            width: 65%;
-            padding: 10px; 
-            background-color: #fff; 
-            display: flex; 
-            flex-direction: column; 
-            border-radius: 5px; 
-            box-shadow: 0 0 5px rgba(0,0,0,0.1); 
-        }
-        
-        .panel-title { font-size: 1.2em; margin-bottom: 10px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px;}
+        /* --- Global Resets & Font --- */
+        :root {
+            --dark-bg-primary: #1e1e1e;       /* Very dark - Page background */
+            --dark-bg-secondary: #252526;   /* Dark - Panel backgrounds, headers */
+            --dark-bg-tertiary: #2d2d2d;    /* Medium Dark - Inputs, some panel areas */
+            --dark-bg-hover: #3e3e40;       /* Hover states */
+            --dark-bg-active: #4f4f52;      /* Active/selected states */
+            
+            --dark-border-primary: #3f3f41;   /* Borders for panels, inputs */
+            --dark-border-secondary: #505050; /* Softer borders */
 
-        /* --- Device toggle menu styles --- */
-        .device-toggle-menu {
-            margin-bottom: 10px;
-            padding: 10px;
-            background-color: #f9f9f9;
-            border: 1px solid #eee;
-            border-radius: 4px;
-            /* MODIFIED: Default to block, will be controlled by JS if toggle is re-enabled */
-            display: block; 
-        }
-        .device-toggle-menu.hidden { /* New class to hide if toggle is re-enabled */
-             display: none;
+            --dark-text-primary: #d4d4d4;     /* Light gray - Main text */
+            --dark-text-secondary: #cccccc;   /* Medium gray - Dimmer text */
+            --dark-text-placeholder: #777777;/* Placeholder text */
+
+            --dark-accent-primary: #007acc;   /* Blue - Primary accent (buttons, highlights) */
+            --dark-accent-hover: #005fab;     /* Darker Blue - Accent hover */
+            
+            --dark-success: #4CAF50;
+            --dark-warning: #ffeb3b; /* Consider a more readable yellow for dark bg */
+            --dark-error: #f44336;
+
+            --font-family-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-family-monospace: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
         }
 
-        #toggle-device-menu-btn { /* Kept for potential re-enablement */
-            width: 100%;
-            padding: 8px;
-            margin-bottom: 10px;
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-family-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: var(--dark-bg-primary);
+            color: var(--dark-text-primary);
+            font-size: 14px;
+        }
+
+        header {
+            background-color: var(--dark-bg-secondary);
+            color: var(--dark-text-primary);
+            padding: 12px 20px;
             text-align: center;
+            border-bottom: 1px solid var(--dark-border-primary);
+            flex-shrink: 0; /* Prevent header from shrinking */
         }
-        #toggle-device-menu-btn:hover {
-            background-color: #5a6268;
+        header h1 {
+            margin: 0;
+            font-size: 1.4em;
+            font-weight: 500;
         }
-        .device-selection select { width: 100%; padding: 8px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ddd;}
+
+        #message-area {
+            padding: 8px 15px;
+            background-color: var(--dark-bg-tertiary);
+            border-bottom: 1px solid var(--dark-border-primary);
+            text-align: center;
+            font-size: 0.9em;
+            color: var(--dark-text-secondary);
+            flex-shrink: 0;
+        }
+        #message-area .error { color: var(--dark-error); }
+        #message-area .success { color: var(--dark-success); }
+
+
+        /* --- Main 3-Column Layout --- */
+        .main-container {
+            display: flex;
+            flex-grow: 1;
+            overflow: hidden; /* Important for fixed height layout */
+            padding: 10px;
+            gap: 10px;
+        }
+
+        .panel {
+            background-color: var(--dark-bg-secondary);
+            border: 1px solid var(--dark-border-primary);
+            border-radius: 6px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Children will handle their own scrolling */
+        }
+
+        #panel-device-view { /* Left panel for device screen */
+            flex: 0 0 38%; /* Adjust as needed, e.g., 400px or percentage */
+            min-width: 350px;
+        }
+
+        #panel-properties { /* Middle panel for element properties */
+            flex: 0 0 30%;
+            min-width: 300px;
+        }
+
+        #panel-hierarchy-code { /* Right panel for hierarchy & python tabs */
+            flex: 1; /* Takes remaining space */
+            min-width: 300px;
+        }
+        
+        .panel-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin: -15px -15px 15px -15px; /* Extend to panel edges */
+            padding: 10px 15px;
+            color: var(--dark-text-primary);
+            border-bottom: 1px solid var(--dark-border-primary);
+            background-color: #333333; /* Slightly different header bg for panels */
+            border-radius: 6px 6px 0 0;
+        }
+
+
+        /* --- Device Selection & Controls (Inside #panel-device-view) --- */
+        .device-selection-area {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--dark-border-secondary);
+        }
+        .device-selection-area label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            color: var(--dark-text-secondary);
+        }
+        #device-select {
+            width: 100%;
+            padding: 8px 10px;
+            background-color: var(--dark-bg-tertiary);
+            color: var(--dark-text-primary);
+            border: 1px solid var(--dark-border-primary);
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+        #device-select:focus {
+            border-color: var(--dark-accent-primary);
+            outline: none;
+        }
 
         .device-screen-container {
-            text-align: center;
-            margin-bottom:10px;
-            flex-grow: 1; 
-            display:flex; /* Using flex to center image and canvas */
-            align-items:center;
-            justify-content:center;
-            min-height: 250px; /* Original min-height */
-            position: relative; /* Essential for absolute positioning of children */
-            background-color: #e0e0e0; /* Light gray background for the container */
+            flex-grow: 1; /* Allow this to take available space in its panel */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px; /* Ensure it has some height */
+            position: relative; 
+            background-color: var(--dark-bg-primary); /* Darker backdrop for the screen */
+            border-radius: 4px;
+            overflow: hidden; /* Important if image/canvas try to break out */
+            margin-bottom: 10px;
         }
         
-        /* Styles for the screenshot image and the overlay canvas */
-        /* Both will be sized by JS to fit within the container while maintaining aspect ratio */
-        #current-device-screen {
+        #current-device-screen, #overlayCanvas {
             max-width: 100%;
-            max-height: 100%; /* Max height of container (e.g. 550px if container has fixed height) */
-            height: auto;     /* Maintain aspect ratio */
-            width: auto;      /* Maintain aspect ratio */
-            border: 1px solid #bbb;
-            background-color: #f0f0f0; /* Fallback if image doesn't load */
+            max-height: 100%;
+            height: auto;    
+            width: auto;     
             border-radius: 3px;
-            /* cursor: crosshair; /* Will be set on canvas instead */
-            display: block; /* Remove extra space below if it's inline */
-            position: absolute; /* Part of layering */
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%); /* Center it */
-            z-index: 1; /* Image below canvas */
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
         }
-
+        #current-device-screen {
+            border: 1px solid var(--dark-border-secondary);
+            z-index: 1;
+        }
         #overlayCanvas {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%); /* Center it */
-            z-index: 2; /* Canvas on top of the image */
-            cursor: crosshair; /* Cursor for interaction */
+            z-index: 2; 
+            cursor: crosshair;
         }
+        /* Tooltip is positioned by JS relative to device-screen-container */
 
-        #highlight-box { /* For the selected element's persistent highlight */
-            position: absolute;
-            border: 2px solid red;
-            box-sizing: border-box;
-            pointer-events: none; 
-            display: none; 
-            z-index: 3; /* Above overlay canvas if needed, or drawn on canvas */
+        .device-controls {
+            text-align: center;
+            padding-top: 10px;
+            border-top: 1px solid var(--dark-border-secondary);
+            display: flex;
+            justify-content: space-around;
+            gap: 8px;
         }
-
-        .device-controls { text-align: center; padding-top: 10px; border-top: 1px solid #eee; }
         .device-controls button {
-            padding: 8px 12px; margin: 5px; border: none; background-color: #5cb85c;
-            color: white; border-radius: 4px; cursor: pointer; transition: background-color 0.3s ease;
+            padding: 8px 12px;
+            border: 1px solid var(--dark-border-primary);
+            background-color: var(--dark-bg-tertiary);
+            color: var(--dark-text-primary);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+            flex-grow: 1;
         }
-        .device-controls button:hover { background-color: #4cae4c; }
+        .device-controls button:hover {
+            background-color: var(--dark-accent-hover);
+            border-color: var(--dark-accent-primary);
+            color: white;
+        }
 
-        .tabs { display: flex; margin-bottom: 10px; border-bottom: 1px solid #ccc; }
+
+        /* --- Tabs (Inside #panel-hierarchy-code or #panel-properties) --- */
+        .tabs {
+            display: flex;
+            margin-bottom: 0; /* Tabs flush with panel content */
+            border-bottom: 1px solid var(--dark-border-primary);
+            flex-shrink: 0;
+        }
         .tab-button {
-            padding: 10px 15px; cursor: pointer; background-color: #e9e9e9;
-            border: 1px solid #ccc; 
-            border-bottom: none;
-            margin-right: 5px; border-radius: 4px 4px 0 0;
-            transition: background-color 0.3s ease;
+            padding: 10px 15px;
+            cursor: pointer;
+            background-color: transparent; /* Tabs blend initially */
+            border: none;
+            border-bottom: 3px solid transparent; /* For active indicator */
+            color: var(--dark-text-secondary);
+            transition: color 0.2s ease, border-color 0.2s ease;
+            margin-right: 2px;
+            font-size: 0.95em;
         }
-        .tab-button.active { background-color: #fff; font-weight: bold; border-bottom: 1px solid #fff; }
-        .tab-button:hover:not(.active) { background-color: #d8d8d8; }
+        .tab-button.active {
+            color: var(--dark-accent-primary);
+            font-weight: 600;
+            border-bottom-color: var(--dark-accent-primary);
+        }
+        .tab-button:hover:not(.active) {
+            color: var(--dark-text-primary);
+        }
 
-        .tab-content { display: none; flex-grow: 1; flex-direction: column; padding-top:10px; overflow: hidden; }
-        .tab-content.active { display: flex; }
+        .tab-content {
+            display: none; /* JS handles display:flex */
+            flex-grow: 1;
+            flex-direction: column;
+            padding: 15px 0 0 0; /* Padding for content below tabs */
+            overflow: hidden; /* Allow children to scroll */
+        }
+        .tab-content.active {
+            display: flex;
+        }
 
-        .inspector-container { display: flex; flex-direction: row; flex-grow: 1; gap: 10px; overflow: hidden; }
-        .hierarchy-panel { width: 50%; overflow-y: auto; border: 1px solid #eee; padding: 5px; background-color: #fdfdfd; font-size: 0.9em;}
-        .properties-panel { width: 50%; overflow-y: auto; border: 1px solid #eee; padding: 5px; background-color: #fdfdfd;}
-        .hierarchy-panel ul { list-style-type: none; padding-left: 15px; margin: 0; }
-        .hierarchy-panel li { padding: 3px 0; cursor: pointer; }
-        .hierarchy-panel li:hover { background-color: #e6f7ff; }
-        .hierarchy-panel .selected-node { background-color: #cceeff; font-weight: bold; }
-        .hierarchy-panel .node-details { font-size: 0.8em; color: #777; margin-left: 5px; }
-        .properties-panel table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        .properties-panel th, .properties-panel td { text-align: left; padding: 4px; border-bottom: 1px solid #eee; }
-        .properties-panel th { background-color: #f7f7f7; width: 30%; }
-        .properties-panel input[type="text"] { width: calc(100% - 8px); padding: 3px; border: 1px solid #ddd; border-radius: 3px; background-color: #f0f0f0; }
-        .inspector-controls { margin-bottom: 10px; }
-        .inspector-controls button { padding: 8px 12px; margin-right: 10px; }
+        /* --- Inspector Panel Content (Inside #panel-properties or a tab in #panel-hierarchy-code) --- */
+        /* Element Properties */
+        #element-properties-view, #generated-xpath-container {
+            font-size: 0.9em;
+            overflow-y: auto; /* Scroll properties if they overflow */
+            flex-grow: 1; /* Allow properties to take space */
+        }
+        #element-properties-view h4, #generated-xpath-container h4 { /* Assuming you'll wrap XPath in a container with h4 */
+            font-size: 1em;
+            color: var(--dark-text-secondary);
+            margin-top: 0;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--dark-border-secondary);
+        }
+        .properties-panel table { /* Used by displayNodeProperties */
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95em;
+        }
+        .properties-panel th, .properties-panel td {
+            text-align: left;
+            padding: 6px 8px;
+            border-bottom: 1px solid var(--dark-border-primary);
+            vertical-align: top;
+        }
+        .properties-panel th {
+            background-color: var(--dark-bg-tertiary);
+            color: var(--dark-text-secondary);
+            width: 35%; /* Adjust for key column width */
+            font-weight: normal;
+        }
+        .properties-panel td {
+            word-break: break-all; /* Break long property values */
+        }
+        #generated-xpath {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--dark-border-primary);
+            border-radius: 4px;
+            background-color: var(--dark-bg-tertiary);
+            color: var(--dark-text-primary);
+            font-family: var(--font-family-monospace);
+            margin-top: 5px;
+        }
 
+        /* Hierarchy Panel (Inside #panel-hierarchy-code or #panel-left) */
+        .hierarchy-panel-container { /* New wrapper for title + tree */
+             display: flex; flex-direction: column; flex-grow: 1; overflow: hidden;
+        }
+        #hierarchy-tree-view {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-right: 5px; /* For scrollbar */
+            font-size: 0.9em;
+        }
+        #hierarchy-tree-view ul { list-style-type: none; padding-left: 15px; margin: 0; }
+        #hierarchy-tree-view li { padding: 4px 2px; cursor: pointer; border-radius: 3px; }
+        #hierarchy-tree-view li:hover { background-color: var(--dark-bg-hover); }
+        #hierarchy-tree-view .selected-node { 
+            background-color: var(--dark-accent-primary); 
+            color: white; 
+            font-weight: 500;
+        }
+        #hierarchy-tree-view .selected-node small { color: #e0e0e0; }
+        #hierarchy-tree-view small { color: var(--dark-text-secondary); }
+        
+        /* Interactive Python (Inside a tab in #panel-hierarchy-code) */
         #interactive-python-editor {
-            width: calc(100% - 22px); 
-            height: 250px; 
-            border: 1px solid #ccc;
+            width: 100%; /* Fill parent */
+            height: 200px; /* Or use flex-grow if it's the main element */
+            border: 1px solid var(--dark-border-primary);
+            background-color: #1c1c1c; /* Darker editor background */
+            color: var(--dark-text-primary);
             padding: 10px;
             margin-bottom: 10px;
-            font-family: monospace;
-            font-size: 14px;
+            font-family: var(--font-family-monospace);
+            font-size: 13px;
             border-radius: 4px;
             resize: vertical; 
         }
         #run-python-button {
-            padding: 10px 15px; background-color: #007bff; color: white;
-            border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px; align-self: flex-start;
-            transition: background-color 0.3s ease;
+            padding: 8px 15px; 
+            margin-bottom: 10px; 
+            align-self: flex-start;
         }
-        #run-python-button:hover { background-color: #0056b3; }
         #interactive-python-output {
             flex-grow: 1;
-            border: 1px solid #ccc;
-            background-color: #282c34; 
-            color: #abb2bf; 
+            border: 1px solid var(--dark-border-primary);
+            background-color: var(--dark-bg-primary); 
+            color: var(--dark-text-secondary); 
             padding: 10px;
             white-space: pre-wrap; 
             overflow-y: auto; 
-            font-family: 'Consolas', 'Menlo', 'Monaco', monospace; 
-            font-size: 13px;
+            font-family: var(--font-family-monospace); 
+            font-size: 12px;
             border-radius: 4px;
-            min-height: 150px; 
+            min-height: 100px; 
         }
-        #message-area { 
-            padding: 10px; 
-            background-color: #ffffe0; 
-            border: 1px solid #e6db55; 
-            margin: 0 10px 10px 10px;
-            border-radius: 4px;
-            text-align: center;
-            font-size: 0.9em;
-        }
+        /* Remove old panel styles if they are no longer used or conflict */
+        .left-panel, .right-panel { display:none; } /* Hide old two-panel structure */
+
     </style>
 </head>
 <body>
     <header>
-        <h1>Local App Inspector (uiautodev)</h1>
+        <h1>Local App Inspector (uiautodev) - Dark Mode</h1>
     </header>
 
     <div id="message-area">Initializing...</div>
 
-    <div class="container">
-        <div class="left-panel">
-            <div class="panel-title">Device Control</div>
-            
-            <button id="toggle-device-menu-btn">Hide Device Selection</button>
-            <div id="device-options-menu" class="device-toggle-menu visible"> <div class="device-selection">
-                    <label for="device-select">Select Device:</label>
-                    <select id="device-select"> 
-                        <option value="">Loading devices...</option>
-                    </select>
+    <div class="main-container">
+        <div id="panel-device-view" class="panel">
+            <h3 class="panel-title">Device View</h3>
+            <div class="device-selection-area">
+                <label for="device-select">Select Device:</label>
+                <select id="device-select"> 
+                    <option value="">Loading devices...</option>
+                </select>
                 </div>
-            </div>
             
             <div class="device-screen-container">
-                <img id="current-device-screen" src="https://placehold.co/360x640/e9e9e9/777?text=Device+Screen" alt="Device Screen">
+                <img id="current-device-screen" src="https://placehold.co/360x640/2d2d2d/777?text=Device+Screen" alt="Device Screen">
                 <canvas id="overlayCanvas"></canvas>
-                <div id="highlight-box"></div> </div>
+                </div>
             <div class="device-controls">
-                <button id="refresh-screen-btn" title="Refresh Screenshot">🔄 Refresh</button>
+                <button id="refresh-screen-btn" title="Refresh Screenshot">🔄 Screen</button>
                 <button id="device-home-btn" title="Press Home Button">🏠 Home</button>
                 <button id="device-back-btn" title="Press Back Button">⬅️ Back</button>
             </div>
         </div>
 
-        <div class="right-panel">
+        <div id="panel-properties" class="panel">
+            <h3 class="panel-title">Element Inspector</h3>
+            <h4>Selected Element Properties</h4>
+            <div id="element-properties-view">Select an element from the screenshot or hierarchy.</div>
+            <h4 style="margin-top: 15px;">Generated XPath</h4>
+            <input type="text" id="generated-xpath" readonly placeholder="XPath will appear here">
+        </div>
+
+        <div id="panel-hierarchy-code" class="panel">
             <div class="tabs">
-                <button class="tab-button" onclick="openTab(event, 'inspector-tab')">Inspector</button>
-                <button class="tab-button active" onclick="openTab(event, 'interactive-python-tab')">Interactive Python</button>
+                <button class="tab-button" onclick="window.openTab(event, 'hierarchy-tab-content')">UI Hierarchy</button>
+                <button class="tab-button" onclick="window.openTab(event, 'python-tab-content')">Python Console</button>
             </div>
 
-            <div id="inspector-tab" class="tab-content">
-                <div class="panel-title">UI Inspector
-                    <button id="refresh-hierarchy-btn" style="float: right; font-size:0.8em; padding: 5px 10px;" title="Refresh UI Hierarchy">🔄 Refresh Hierarchy</button>
+            <div id="hierarchy-tab-content" class="tab-content">
+                <div class="panel-title" style="margin-top:0; border-radius:0; background-color: transparent; border-bottom: 1px solid var(--dark-border-secondary); padding-left:0; padding-right:0;">
+                    Element Tree
+                    <button id="refresh-hierarchy-btn" style="float: right; font-size:0.8em; padding: 3px 8px;" title="Refresh UI Hierarchy">🔄 Refresh</button>
                 </div>
-                <div class="inspector-container">
-                    <div class="hierarchy-panel">
-                        <div id="hierarchy-tree-view">Hierarchy will load here...</div>
-                    </div>
-                    <div class="properties-panel">
-                        <h4>Selected Element Properties</h4>
-                        <div id="element-properties-view">Select an element from the screenshot or hierarchy.</div>
-                        <h4>Generated XPath</h4>
-                        <input type="text" id="generated-xpath" readonly placeholder="XPath will appear here">
-                    </div>
-                </div>
+                <div id="hierarchy-tree-view" style="padding-top:10px; flex-grow:1; overflow-y:auto;">Hierarchy will load here...</div>
             </div>
 
-            <div id="interactive-python-tab" class="tab-content">
-                <div class="panel-title">Python uiautomator2 Console</div>
+            <div id="python-tab-content" class="tab-content">
+                <div class="panel-title" style="margin-top:0; border-radius:0; background-color: transparent; border-bottom: 1px solid var(--dark-border-secondary); padding-left:0; padding-right:0;">Interactive Python</div>
                 <textarea id="interactive-python-editor" placeholder="Enter Python code here (e.g., print(d.info) or d.shell('ls'))"></textarea>
                 <button id="run-python-button">▶️ Run Code</button>
                 <div id="interactive-python-output"># Output will appear here...</div>
@@ -255,72 +407,30 @@
 
     <script src="/static/local_inspector.js"></script> 
     <script>
-        // Tab switching function
-        function openTab(evt, tabName) {
-            var i, tabcontent, tabbuttons;
-            tabcontent = document.getElementsByClassName("tab-content");
-            for (i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
-            }
-            tabbuttons = document.getElementsByClassName("tab-button");
-            for (i = 0; i < tabbuttons.length; i++) {
-                tabbuttons[i].className = tabbuttons[i].className.replace(" active", "");
-            }
-            var activeTabEl = document.getElementById(tabName);
-            if (activeTabEl) { // Check if element exists
-                 activeTabEl.style.display = "flex";
-            }
-           
-            if(evt && evt.currentTarget) {
-                evt.currentTarget.className += " active";
-            } else {
-                for (i = 0; i < tabbuttons.length; i++) {
-                    const onclickAttr = tabbuttons[i].getAttribute('onclick');
-                    if(onclickAttr && onclickAttr.includes("'" + tabName + "'")) { 
-                        tabbuttons[i].className += " active";
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Device selection toggle functionality (can be re-enabled if desired)
-        const toggleBtn = document.getElementById('toggle-device-menu-btn');
-        const deviceMenu = document.getElementById('device-options-menu');
-        if (toggleBtn && deviceMenu) { 
-            // Set initial button text based on visibility
-            toggleBtn.textContent = deviceMenu.classList.contains('visible') ? 'Hide Device Selection' : 'Show Device Selection';
-
-            toggleBtn.addEventListener('click', function() {
-                const isVisible = deviceMenu.classList.toggle('visible');
-                // deviceMenu.classList.toggle('hidden'); // Alternative if using .hidden class
-                toggleBtn.textContent = isVisible ? 'Hide Device Selection' : 'Show Device Selection';
-            });
-        }
+        // This openTab function should ideally be part of local_inspector.js 
+        // or ensured to be globally available before local_inspector.js tries to use it.
+        // For now, local_inspector.js has a fallback if window.openTab isn't defined.
+        // If you keep this here, ensure local_inspector.js's DOMContentLoaded is correctly handling it.
         
-
+        // Initialize default tab after DOM is ready (local_inspector.js will handle its own init)
         document.addEventListener('DOMContentLoaded', function() {
-            const defaultTab = 'interactive-python-tab'; 
-            const defaultTabButton = Array.from(document.querySelectorAll('.tab-button')).find(btn => {
-                const onclickAttr = btn.getAttribute('onclick');
-                // Make matching more robust for single or double quotes
-                return onclickAttr && (onclickAttr.includes("'" + defaultTab + "'") || onclickAttr.includes('"' + defaultTab + '"'));
-            });
-            
-            if (defaultTabButton) {
-                 openTab({ currentTarget: defaultTabButton }, defaultTab); 
-            } else {
-                // Fallback: if no button found for defaultTab, try to open the first tab
-                const firstTabButton = document.querySelector('.tab-button');
-                if (firstTabButton) {
-                    const onclickAttr = firstTabButton.getAttribute('onclick');
-                    const match = onclickAttr ? onclickAttr.match(/openTab\(event, ['"]([^'"]+)['"]\)/) : null;
-                    if (match && match[1]) {
-                        openTab({ currentTarget: firstTabButton }, match[1]);
-                    }
+            // The tab initialization is now handled at the end of local_inspector.js
+            // to ensure window.openTab (defined in JS) is available.
+            // You can trigger the default tab opening from there or by calling it here if needed.
+             if (window.openTab) { // Check if openTab from local_inspector.js is ready
+                const initialTab = 'hierarchy-tab-content'; // Or 'python-tab-content'
+                const initialTabButton = Array.from(document.querySelectorAll('.tab-button')).find(btn => {
+                    const onclickAttr = btn.getAttribute('onclick');
+                    return onclickAttr && (onclickAttr.includes("'" + initialTab + "'") || onclickAttr.includes('"' + initialTab + '"'));
+                });
+                if (initialTabButton) {
+                    window.openTab({ currentTarget: initialTabButton }, initialTab);
+                } else {
+                    // Fallback to first tab if specific one not found
+                    const firstButton = document.querySelector('#panel-hierarchy-code .tab-button');
+                    if(firstButton) firstButton.click();
                 }
             }
-            // Initialization logic (device loading etc.) is in local_inspector.js
         });
     </script>
 </body>

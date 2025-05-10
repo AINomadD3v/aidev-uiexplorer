@@ -33,8 +33,7 @@ document.addEventListener("DOMContentLoaded", function () {
     "element-properties-view",
   );
   const generatedXpathEl = document.getElementById("generated-xpath");
-  const refreshHierarchyBtn = document.getElementById("refresh-hierarchy-btn");
-  // ... other element getters
+  // ... other element getters (ensure refreshHierarchyBtn is gotten in initialize if not global)
 
   // --- State ---
   let currentDeviceSerial = null;
@@ -68,7 +67,7 @@ document.addEventListener("DOMContentLoaded", function () {
       canvasTooltip.style.pointerEvents = "none";
       canvasTooltip.style.zIndex = "10001";
       canvasTooltip.style.border = "1px solid #555";
-      canvasTooltip.style.maxWidth = "380px"; // Slightly wider for potentially long XPaths
+      canvasTooltip.style.maxWidth = "380px";
       canvasTooltip.style.maxHeight = "220px";
       canvasTooltip.style.overflowY = "auto";
       canvasTooltip.style.wordBreak = "break-all";
@@ -177,7 +176,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!overlayCtx || !overlayCanvas || overlayCanvas.width === 0) return;
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     if (!currentHierarchyData) {
-      if (DEBUG_ELEMENT_FINDING)
+      if (DEBUG_ELEMENT_FINDING && !isHierarchyLoading)
         console.warn(
           "drawNodeOverlays: currentHierarchyData is null, cannot draw overlays.",
         );
@@ -197,31 +196,24 @@ document.addEventListener("DOMContentLoaded", function () {
         const rectW = (x2_rel - x1_rel) * overlayCanvas.width;
         const rectH = (y2_rel - y1_rel) * overlayCanvas.height;
 
-        if (rectW <= 0 || rectH <= 0) {
-          // Do not draw zero-area or negative-area boxes
-          // if(DEBUG_ELEMENT_FINDING) console.log("drawNodeOverlays: Skipping node with zero/negative area:", node.name, node.key, "W:", rectW, "H:", rectH);
-          return;
-        }
+        if (rectW <= 0 || rectH <= 0) return;
         overlayCtx.beginPath();
         overlayCtx.rect(rectX, rectY, rectW, rectH);
 
-        let styleApplied = false;
         if (selectedNode && selectedNode.key === node.key) {
           overlayCtx.strokeStyle = "rgba(255,0,0,0.9)";
           overlayCtx.lineWidth = 2;
-          if (DEBUG_ELEMENT_FINDING)
+          if (DEBUG_ELEMENT_FINDING) {
             console.log(
-              `DRAW_SELECTED: Preparing to stroke selected ${node.name} (Key:${node.key}) at [${rectX.toFixed(1)},${rectY.toFixed(1)},${rectW.toFixed(1)},${rectH.toFixed(1)}] with ${overlayCtx.strokeStyle}`,
+              `DRAW_SELECTED: Highlighting selected ${node.name} (Key:${node.key}) at canvas [${rectX.toFixed(1)},${rectY.toFixed(1)},${rectW.toFixed(1)},${rectH.toFixed(1)}] with color ${overlayCtx.strokeStyle}. Rel bounds: [${node.bounds.map((b) => b.toFixed(4)).join(",")}]`,
             );
-          styleApplied = true;
+          }
         } else if (hoveredNode && hoveredNode.key === node.key) {
           overlayCtx.strokeStyle = "rgba(0,120,255,0.9)";
           overlayCtx.lineWidth = 2;
-          styleApplied = true;
         } else {
           overlayCtx.strokeStyle = "rgba(150,150,150,0.4)";
           overlayCtx.lineWidth = 1;
-          // No need to set styleApplied = true for default, only for specific highlights
         }
         overlayCtx.stroke();
       }
@@ -231,13 +223,11 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function updateAndShowTooltip(node, pageX, pageY) {
+    /* ... (same as previous version, ensure it uses pageX/Y for positioning to right of mouse) ... */
     if (!canvasTooltip) createCanvasTooltip();
     if (!canvasTooltip || !node || !deviceScreenContainer) {
       if (DEBUG_ELEMENT_FINDING)
-        console.warn(
-          "Tooltip: updateAndShowTooltip - Prerequisites not met (canvasTooltip, node, or deviceScreenContainer). Node:",
-          node,
-        );
+        console.warn("Tooltip: updateAndShowTooltip - Prerequisites not met.");
       hideTooltip();
       return;
     }
@@ -264,35 +254,29 @@ document.addEventListener("DOMContentLoaded", function () {
       canvasTooltip.innerHTML = `
         <div style="margin-bottom:3px; font-weight:bold; color:#92c9ff;">${escapeHtml(name)}</div>
         <div style="margin-bottom:3px;">${escapeHtml(rectInfo)}</div>
-        <div style="margin-bottom:3px;"><span style="color:#888;">Desc:</span> ${escapeHtml(contentDesc)}</div>
-        <div style="margin-bottom:3px;"><span style="color:#888;">ID:</span> ${escapeHtml(resourceId)}</div>
-        <div><span style="color:#888;">XPath:</span> ${escapeHtml(xpath)}</div>`;
+        <div style="margin-bottom:3px;"><span style="color:#aaa;">Desc:</span> ${escapeHtml(contentDesc)}</div>
+        <div style="margin-bottom:3px;"><span style="color:#aaa;">ID:</span> ${escapeHtml(resourceId)}</div>
+        <div><span style="color:#aaa;">XPath:</span> ${escapeHtml(xpath)}</div>`;
       const containerRect = deviceScreenContainer.getBoundingClientRect();
-      let targetX = pageX - containerRect.left + 25; // 25px to the right of cursor
-      let targetY = pageY - containerRect.top + 15; // 15px below cursor
+      let targetX = pageX - containerRect.left + 25;
+      let targetY = pageY - containerRect.top + 15;
       if (
         targetX + canvasTooltip.offsetWidth >
         deviceScreenContainer.clientWidth - 10
       ) {
-        // 10px padding from edge
-        targetX = pageX - containerRect.left - canvasTooltip.offsetWidth - 25; // Try 25px left of cursor
+        targetX = pageX - containerRect.left - canvasTooltip.offsetWidth - 25;
       }
       if (targetX < 5) targetX = 5;
       if (
         targetY + canvasTooltip.offsetHeight >
         deviceScreenContainer.clientHeight - 10
       ) {
-        // 10px padding from edge
-        targetY = pageY - containerRect.top - canvasTooltip.offsetHeight - 15; // Try 15px above cursor
+        targetY = pageY - containerRect.top - canvasTooltip.offsetHeight - 15;
       }
       if (targetY < 5) targetY = 5;
       canvasTooltip.style.left = `${Math.max(0, targetX)}px`;
       canvasTooltip.style.top = `${Math.max(0, targetY)}px`;
       canvasTooltip.style.display = "block";
-      // if (DEBUG_ELEMENT_FINDING) {
-      //   console.log("Tooltip: Displayed. Content:", canvasTooltip.textContent.replace(/\s\s+/g, ' ').substring(0,100)+"...");
-      //   console.log("Tooltip: Style - top:", canvasTooltip.style.top, "left:", canvasTooltip.style.left, "display:", canvasTooltip.style.display);
-      // }
     } catch (e) {
       console.error("Error in updateAndShowTooltip:", e, "for node:", node);
       hideTooltip();
@@ -300,7 +284,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   function hideTooltip() {
     if (canvasTooltip) {
-      // if (DEBUG_ELEMENT_FINDING && canvasTooltip.style.display !== 'none') console.log("Tooltip: Hiding tooltip.");
       canvasTooltip.style.display = "none";
     }
   }
@@ -336,7 +319,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (messageArea) messageArea.textContent = "No devices found.";
         clearDeviceInfo();
       }
-      await handleDeviceSelectionChange(); // This will trigger hierarchy load if needed
+      await handleDeviceSelectionChange();
     } catch (e) {
       console.error("loadDeviceList CATCH:", e.message);
       if (deviceSelect)
@@ -502,7 +485,6 @@ document.addEventListener("DOMContentLoaded", function () {
           typeof hData.rect.width === "number" &&
           typeof hData.rect.height === "number"
         ) {
-          // Only set actualDeviceWidth/Height from hierarchy if not already set by screenshot (which is usually more accurate for physical pixels)
           if (!actualDeviceWidth && hData.rect.width > 0)
             actualDeviceWidth = hData.rect.x + hData.rect.width;
           if (!actualDeviceHeight && hData.rect.height > 0)
@@ -633,6 +615,100 @@ document.addEventListener("DOMContentLoaded", function () {
     return `//${c}`;
   }
 
+  // --- New Element Finding Strategy ---
+  function findBestElementFromCandidates(candidates, relX, relY) {
+    if (!candidates || candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0];
+
+    candidates.sort((a, b) => {
+      // Ensure bounds are valid before calculating area
+      const aBoundsValid =
+        a.bounds &&
+        a.bounds.length === 4 &&
+        a.bounds.every((val) => typeof val === "number" && !isNaN(val));
+      const bBoundsValid =
+        b.bounds &&
+        b.bounds.length === 4 &&
+        b.bounds.every((val) => typeof val === "number" && !isNaN(val));
+
+      if (!aBoundsValid && bBoundsValid) return 1; // b is better if a has invalid bounds
+      if (aBoundsValid && !bBoundsValid) return -1; // a is better if b has invalid bounds
+      if (!aBoundsValid && !bBoundsValid) return 0; // both invalid, no preference based on area
+
+      const aClickable = a.properties?.clickable === "true";
+      const bClickable = b.properties?.clickable === "true";
+
+      // Prefer clickable elements
+      if (aClickable && !bClickable) return -1;
+      if (!aClickable && bClickable) return 1;
+
+      // Prefer smaller area
+      const aArea = (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]);
+      const bArea = (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]);
+      if (aArea < bArea) return -1;
+      if (aArea > bArea) return 1;
+
+      // Optional: Prefer elements with resource-id or text if areas are same
+      const aHasIdOrText = a.properties?.["resource-id"] || a.properties?.text;
+      const bHasIdOrText = b.properties?.["resource-id"] || b.properties?.text;
+      if (aHasIdOrText && !bHasIdOrText) return -1;
+      if (!aHasIdOrText && bHasIdOrText) return 1;
+
+      return 0; // Or sort by depth if available (though findAllRecursive doesn't explicitly track depth for sorting here)
+    });
+    if (DEBUG_ELEMENT_FINDING)
+      console.log(
+        `findBestElementFromCandidates: Chose ${candidates[0].name} (Key: ${candidates[0].key}) from ${candidates.length} candidates.`,
+      );
+    return candidates[0];
+  }
+
+  function findAllElementsRecursive(node, relX, relY, candidatesList) {
+    if (!node) return;
+    if (
+      !node.bounds ||
+      !Array.isArray(node.bounds) ||
+      node.bounds.length !== 4 ||
+      node.bounds.some((b) => typeof b !== "number" || isNaN(b))
+    ) {
+      return; // Skip nodes with invalid bounds
+    }
+
+    const [x1, y1, x2, y2] = node.bounds;
+    const nodeWidth = x2 - x1;
+    const nodeHeight = y2 - y1;
+
+    if (nodeWidth <= 0 || nodeHeight <= 0) return; // Skip zero-area elements
+
+    const isXWithin = relX >= x1 && relX <= x2;
+    const isYWithin = relY >= y1 && relY <= y2;
+
+    if (isXWithin && isYWithin) {
+      // Check if node is generally useful (e.g., not an overly generic large container that is NOT clickable)
+      // This is a heuristic and can be tuned.
+      const isClickable = node.properties?.clickable === "true";
+      const isPotentiallyOverlay =
+        (node.name === "android.widget.FrameLayout" ||
+          node.name === "android.view.ViewGroup") &&
+        nodeWidth * nodeHeight > 0.7 && // Covers >70% of screen area (relative)
+        !isClickable;
+      // Add more conditions if needed, e.g. no resource-id
+
+      // Add the node if it's clickable, or if it's not a potential overlay,
+      // OR if it's an overlay but we decide to include it anyway (e.g., for debugging overlays)
+      // For now, let's add all geometric matches and let findBestElementFromCandidates sort it out.
+      candidatesList.push(node);
+
+      if (node.children && node.children.length > 0) {
+        for (const child of node.children) {
+          if (child && typeof child === "object") {
+            findAllElementsRecursive(child, relX, relY, candidatesList);
+          }
+        }
+      }
+    }
+  }
+
   function findElementAtCanvasCoordinates(canvasX, canvasY) {
     if (DEBUG_ELEMENT_FINDING)
       console.log(
@@ -656,10 +732,13 @@ document.addEventListener("DOMContentLoaded", function () {
         );
       return null;
     }
+
     const relX = canvasX / overlayCanvas.width;
     const relY = canvasY / overlayCanvas.height;
     let hierarchyToSearch = currentHierarchyData;
+
     if (hierarchyToSearch) {
+      // Root node bounds check and fix
       if (
         !hierarchyToSearch.bounds ||
         !Array.isArray(hierarchyToSearch.bounds) ||
@@ -684,92 +763,29 @@ document.addEventListener("DOMContentLoaded", function () {
       return null;
     }
 
-    const found = findElementAtRelativeCoordinates(
+    const allPotentialMatches = [];
+    findAllElementsRecursive(
       hierarchyToSearch,
       relX,
       relY,
-      "root",
-      0,
-    ); // Pass initial depth
+      allPotentialMatches,
+    );
+
+    const bestFound = findBestElementFromCandidates(
+      allPotentialMatches,
+      relX,
+      relY,
+    );
 
     if (DEBUG_ELEMENT_FINDING)
       console.log(
-        `findElementAtCanvasCoordinates: Final result - ${found ? found.name + " (Key:" + found.key + ")" : "None"}`,
+        `findElementAtCanvasCoordinates: Final best result - ${bestFound ? bestFound.name + " (Key:" + bestFound.key + ")" : "None"}`,
       );
-    return found;
+    return bestFound;
   }
 
-  // Modified findElementAtRelativeCoordinates to potentially favor smaller, clickable elements
-  function findElementAtRelativeCoordinates(
-    node,
-    relX,
-    relY,
-    pathForDebug,
-    depth,
-  ) {
-    if (!node) return null;
-    if (
-      !node.bounds ||
-      !Array.isArray(node.bounds) ||
-      node.bounds.length !== 4 ||
-      node.bounds.some((b) => typeof b !== "number" || isNaN(b))
-    ) {
-      // if (DEBUG_ELEMENT_FINDING && pathForDebug === "root") console.warn(`  Recursive Find: Path ${pathForDebug} - Node ${node.name || node.key || "Unknown"} has invalid/NaN bounds:`, node.bounds);
-      return null;
-    }
-
-    const [x1, y1, x2, y2] = node.bounds;
-    const nodeWidth = x2 - x1;
-    const nodeHeight = y2 - y1;
-    if (nodeWidth <= 0 || nodeHeight <= 0) return null;
-
-    const isXWithin = relX >= x1 && relX <= x2;
-    const isYWithin = relY >= y1 && relY <= y2;
-
-    if (isXWithin && isYWithin) {
-      let bestMatch = node; // Current node is a candidate.
-
-      if (node.children && node.children.length > 0) {
-        for (let i = 0; i < node.children.length; i++) {
-          const child = node.children[i];
-          if (child && typeof child === "object") {
-            const childCandidate = findElementAtRelativeCoordinates(
-              child,
-              relX,
-              relY,
-              pathForDebug + "/" + i,
-              depth + 1,
-            );
-            if (childCandidate) {
-              // Heuristic to prefer a more specific (often smaller, clickable) child
-              if (
-                bestMatch === node || // current bestMatch is the parent itself
-                (childCandidate.properties?.clickable === "true" &&
-                  bestMatch.properties?.clickable !== "true") || // child is clickable, parent isn't
-                ((childCandidate.bounds[2] - childCandidate.bounds[0]) *
-                  (childCandidate.bounds[3] - childCandidate.bounds[1]) <
-                  (bestMatch.bounds[2] - bestMatch.bounds[0]) *
-                    (bestMatch.bounds[3] - bestMatch.bounds[1]) &&
-                  !(bestMatch.properties?.clickable === "true")) // child is smaller and current best isn't clickable
-              ) {
-                // If the child is significantly smaller, or more interactive, it's often a better target than a large container parent.
-                // This helps "pierce" through large containers if a more specific child is found.
-                // However, we still need to ensure the deepest specific match is found.
-                // The recursive nature should handle "deepest". This logic is more about "better" at the same effective visual layer.
-
-                // The current recursive approach for `bestMatch` is "deepest wins". Let's keep that for now
-                // and address the "greedy overlay" by a different filter if needed or by enhancing this heuristic.
-                // For now, simple deepest wins:
-                bestMatch = childCandidate;
-              }
-            }
-          }
-        }
-      }
-      return bestMatch; // This will be the deepest node that geometrically matches.
-    }
-    return null;
-  }
+  // Old findElementAtRelativeCoordinates can be removed or commented out if findAllElementsRecursive + findBestElementFromCandidates is used.
+  // function findElementAtRelativeCoordinates(node, relX, relY, pathForDebug, depth) { ... }
 
   if (overlayCanvas) {
     overlayCanvas.addEventListener("mousemove", function (event) {
@@ -778,6 +794,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       const nodeUnderMouse = findElementAtCanvasCoordinates(x, y);
+      // if (DEBUG_ELEMENT_FINDING) console.log("MOUSEMOVE: nodeUnderMouse:", nodeUnderMouse ? nodeUnderMouse.key : "null", "| current hoveredNode:", hoveredNode ? hoveredNode.key : "null");
       if (hoveredNode?.key !== nodeUnderMouse?.key) {
         // if (DEBUG_ELEMENT_FINDING && nodeUnderMouse) console.log("MOUSEMOVE: Hover changed to ->", nodeUnderMouse.name, nodeUnderMouse.key);
         // else if (DEBUG_ELEMENT_FINDING && !nodeUnderMouse && hoveredNode) console.log("MOUSEMOVE: Hover ended from", hoveredNode.name, hoveredNode.key);
@@ -922,7 +939,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function initialize() {
-    /* ... (same, with button consts local if not already) ... */
     if (messageArea)
       messageArea.innerHTML =
         "<span style='color: blue;'>Initializing...</span>";
@@ -938,7 +954,7 @@ document.addEventListener("DOMContentLoaded", function () {
         deviceScreenImg.onloadAttachedToInspector = true;
       }
     } else console.warn("Init: deviceScreenImg not found");
-    const localRefreshScreenBtn = document.getElementById("refresh-screen-btn"); // Ensure using local consts
+    const localRefreshScreenBtn = document.getElementById("refresh-screen-btn");
     if (localRefreshScreenBtn)
       localRefreshScreenBtn.addEventListener(
         "click",
@@ -970,7 +986,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   if (typeof window.openTab !== "function") {
-    /* ... (same openTab definition) ... */
     window.openTab = function (evt, tabName) {
       let i, tc, tb;
       tc = document.getElementsByClassName("tab-content");
