@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local App Inspector (Testing - Device Select Always Visible)</title>
+    <title>Local App Inspector (uiautodev)</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; background-color: #f4f4f4; }
         header { background-color: #333; color: white; padding: 10px 20px; text-align: center; }
@@ -34,17 +34,21 @@
         
         .panel-title { font-size: 1.2em; margin-bottom: 10px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px;}
 
-        /* --- MODIFIED FOR TESTING: Device toggle menu always visible --- */
+        /* --- Device toggle menu styles --- */
         .device-toggle-menu {
             margin-bottom: 10px;
             padding: 10px;
             background-color: #f9f9f9;
             border: 1px solid #eee;
             border-radius: 4px;
-            display: block; /* MODIFIED: Make it always block for testing */
+            /* MODIFIED: Default to block, will be controlled by JS if toggle is re-enabled */
+            display: block; 
         }
-        /* Original toggle button style (not used in this test version but kept for completeness of your CSS) */
-        #toggle-device-menu-btn {
+        .device-toggle-menu.hidden { /* New class to hide if toggle is re-enabled */
+             display: none;
+        }
+
+        #toggle-device-menu-btn { /* Kept for potential re-enablement */
             width: 100%;
             padding: 8px;
             margin-bottom: 10px;
@@ -64,28 +68,51 @@
             text-align: center;
             margin-bottom:10px;
             flex-grow: 1; 
-            display:flex;
+            display:flex; /* Using flex to center image and canvas */
             align-items:center;
             justify-content:center;
-            min-height: 250px;
-            position: relative; 
+            min-height: 250px; /* Original min-height */
+            position: relative; /* Essential for absolute positioning of children */
+            background-color: #e0e0e0; /* Light gray background for the container */
         }
-        .device-screen-container img {
+        
+        /* Styles for the screenshot image and the overlay canvas */
+        /* Both will be sized by JS to fit within the container while maintaining aspect ratio */
+        #current-device-screen {
             max-width: 100%;
-            max-height: 550px;
-            height: auto;
-            border: 1px solid #ddd;
-            background-color: #e9e9e9;
+            max-height: 100%; /* Max height of container (e.g. 550px if container has fixed height) */
+            height: auto;     /* Maintain aspect ratio */
+            width: auto;      /* Maintain aspect ratio */
+            border: 1px solid #bbb;
+            background-color: #f0f0f0; /* Fallback if image doesn't load */
             border-radius: 3px;
-            cursor: crosshair; 
+            /* cursor: crosshair; /* Will be set on canvas instead */
+            display: block; /* Remove extra space below if it's inline */
+            position: absolute; /* Part of layering */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); /* Center it */
+            z-index: 1; /* Image below canvas */
         }
-        #highlight-box {
+
+        #overlayCanvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); /* Center it */
+            z-index: 2; /* Canvas on top of the image */
+            cursor: crosshair; /* Cursor for interaction */
+        }
+
+        #highlight-box { /* For the selected element's persistent highlight */
             position: absolute;
             border: 2px solid red;
             box-sizing: border-box;
             pointer-events: none; 
             display: none; 
+            z-index: 3; /* Above overlay canvas if needed, or drawn on canvas */
         }
+
         .device-controls { text-align: center; padding-top: 10px; border-top: 1px solid #eee; }
         .device-controls button {
             padding: 8px 12px; margin: 5px; border: none; background-color: #5cb85c;
@@ -121,7 +148,6 @@
         .properties-panel input[type="text"] { width: calc(100% - 8px); padding: 3px; border: 1px solid #ddd; border-radius: 3px; background-color: #f0f0f0; }
         .inspector-controls { margin-bottom: 10px; }
         .inspector-controls button { padding: 8px 12px; margin-right: 10px; }
-
 
         #interactive-python-editor {
             width: calc(100% - 22px); 
@@ -175,18 +201,19 @@
         <div class="left-panel">
             <div class="panel-title">Device Control</div>
             
-            <div id="device-options-menu" class="device-toggle-menu"> 
-                <div class="device-selection">
+            <button id="toggle-device-menu-btn">Hide Device Selection</button>
+            <div id="device-options-menu" class="device-toggle-menu visible"> <div class="device-selection">
                     <label for="device-select">Select Device:</label>
-                    <select id="device-select"> <option value="">Loading devices...</option>
+                    <select id="device-select"> 
+                        <option value="">Loading devices...</option>
                     </select>
                 </div>
             </div>
             
             <div class="device-screen-container">
                 <img id="current-device-screen" src="https://placehold.co/360x640/e9e9e9/777?text=Device+Screen" alt="Device Screen">
-                <div id="highlight-box"></div>
-            </div>
+                <canvas id="overlayCanvas"></canvas>
+                <div id="highlight-box"></div> </div>
             <div class="device-controls">
                 <button id="refresh-screen-btn" title="Refresh Screenshot">🔄 Refresh</button>
                 <button id="device-home-btn" title="Press Home Button">🏠 Home</button>
@@ -239,7 +266,11 @@
             for (i = 0; i < tabbuttons.length; i++) {
                 tabbuttons[i].className = tabbuttons[i].className.replace(" active", "");
             }
-            document.getElementById(tabName).style.display = "flex";
+            var activeTabEl = document.getElementById(tabName);
+            if (activeTabEl) { // Check if element exists
+                 activeTabEl.style.display = "flex";
+            }
+           
             if(evt && evt.currentTarget) {
                 evt.currentTarget.className += " active";
             } else {
@@ -253,26 +284,43 @@
             }
         }
 
-        // Device selection toggle functionality - COMMENTED OUT FOR TEST
-        /*
+        // Device selection toggle functionality (can be re-enabled if desired)
         const toggleBtn = document.getElementById('toggle-device-menu-btn');
         const deviceMenu = document.getElementById('device-options-menu');
-        if (toggleBtn && deviceMenu) { // Check if elements exist before adding listener
+        if (toggleBtn && deviceMenu) { 
+            // Set initial button text based on visibility
+            toggleBtn.textContent = deviceMenu.classList.contains('visible') ? 'Hide Device Selection' : 'Show Device Selection';
+
             toggleBtn.addEventListener('click', function() {
                 const isVisible = deviceMenu.classList.toggle('visible');
+                // deviceMenu.classList.toggle('hidden'); // Alternative if using .hidden class
                 toggleBtn.textContent = isVisible ? 'Hide Device Selection' : 'Show Device Selection';
             });
         }
-        */
+        
 
         document.addEventListener('DOMContentLoaded', function() {
             const defaultTab = 'interactive-python-tab'; 
             const defaultTabButton = Array.from(document.querySelectorAll('.tab-button')).find(btn => {
                 const onclickAttr = btn.getAttribute('onclick');
-                return onclickAttr && onclickAttr.includes("'" + defaultTab + "'");
+                // Make matching more robust for single or double quotes
+                return onclickAttr && (onclickAttr.includes("'" + defaultTab + "'") || onclickAttr.includes('"' + defaultTab + '"'));
             });
-            openTab(defaultTabButton ? { currentTarget: defaultTabButton } : null, defaultTab); 
-            // The rest of the initialization logic (device loading etc.) is in local_inspector.js
+            
+            if (defaultTabButton) {
+                 openTab({ currentTarget: defaultTabButton }, defaultTab); 
+            } else {
+                // Fallback: if no button found for defaultTab, try to open the first tab
+                const firstTabButton = document.querySelector('.tab-button');
+                if (firstTabButton) {
+                    const onclickAttr = firstTabButton.getAttribute('onclick');
+                    const match = onclickAttr ? onclickAttr.match(/openTab\(event, ['"]([^'"]+)['"]\)/) : null;
+                    if (match && match[1]) {
+                        openTab({ currentTarget: firstTabButton }, match[1]);
+                    }
+                }
+            }
+            // Initialization logic (device loading etc.) is in local_inspector.js
         });
     </script>
 </body>

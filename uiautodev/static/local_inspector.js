@@ -1,1183 +1,1050 @@
 // uiautodev/static/local_inspector.js
-
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("DOMContentLoaded: Event FIRED."); // Added: Log DOMContentLoaded
-
-  // --- Configuration ---
-  const EXTENSION_ID = "fjbboaelofjaabjmlphndicacmapbalm"; // Keep for now
-
   // --- DOM Elements ---
-  // Attempt to get elements and log if they are found or not
   const messageArea = document.getElementById("message-area");
-  console.log(
-    "DOMContentLoaded: messageArea element:",
-    messageArea ? "Found" : "NOT FOUND",
-  );
-
   const deviceSelect = document.getElementById("device-select");
-  console.log(
-    "DOMContentLoaded: deviceSelect element:",
-    deviceSelect ? "Found" : "NOT FOUND",
-  );
+  const overlayCanvas = document.getElementById("overlayCanvas");
+  let overlayCtx = null;
 
-  // It's good practice to check if critical elements exist before proceeding
+  if (overlayCanvas) {
+    overlayCtx = overlayCanvas.getContext("2d");
+  } else {
+    console.error(
+      "CRITICAL DOMContentLoaded: overlayCanvas element NOT FOUND!",
+    );
+    if (messageArea)
+      messageArea.innerHTML =
+        "<span style='color: red;'>Error: Overlay Canvas missing.</span>";
+    return;
+  }
   if (!messageArea || !deviceSelect) {
     console.error(
-      "DOMContentLoaded: CRITICAL - A required element (messageArea or deviceSelect) was not found. Further UI operations may fail.",
+      "CRITICAL DOMContentLoaded: messageArea or deviceSelect element NOT FOUND.",
     );
-    if (messageArea) {
-      // If messageArea exists, at least show an error there
-      messageArea.innerHTML =
-        "<span style='color: red;'>Critical Frontend Error: UI elements missing. Check HTML IDs.</span>";
-    }
-    // Optionally, you could return here to prevent other code from running if these are absolutely essential from the start
-    // return;
+    return;
   }
-
-  const deviceSerialEl = document.getElementById("device-serial"); // Not critical for initial load, but good to know
-  const deviceModelEl = document.getElementById("device-model");
-  const deviceSdkEl = document.getElementById("device-sdk");
-  console.log(
-    "DOMContentLoaded: deviceSerialEl:",
-    deviceSerialEl ? "Found" : "NOT FOUND",
-  );
-  console.log(
-    "DOMContentLoaded: deviceModelEl:",
-    deviceModelEl ? "Found" : "NOT FOUND",
-  );
-  console.log(
-    "DOMContentLoaded: deviceSdkEl:",
-    deviceSdkEl ? "Found" : "NOT FOUND",
-  );
 
   const deviceScreenImg = document.getElementById("current-device-screen");
   const deviceScreenContainer = document.querySelector(
     ".device-screen-container",
   );
-  const highlightBox = document.getElementById("highlight-box");
-  const refreshScreenBtn = document.getElementById("refresh-screen-btn");
-  const deviceHomeBtn = document.getElementById("device-home-btn");
-  const deviceBackBtn = document.getElementById("device-back-btn");
-
-  const pythonEditor = document.getElementById("interactive-python-editor");
-  const runPythonBtn = document.getElementById("run-python-button");
-  const pythonOutput = document.getElementById("interactive-python-output");
-
-  const inspectorTab = document.getElementById("inspector-tab");
-  const refreshHierarchyBtn = document.getElementById("refresh-hierarchy-btn");
   const hierarchyTreeViewEl = document.getElementById("hierarchy-tree-view");
   const elementPropertiesViewEl = document.getElementById(
     "element-properties-view",
   );
   const generatedXpathEl = document.getElementById("generated-xpath");
+  const refreshHierarchyBtn = document.getElementById("refresh-hierarchy-btn");
+  // ... other element getters
 
   // --- State ---
   let currentDeviceSerial = null;
-  let devices = []; // Global 'devices' array
+  let devices = [];
   let screenshotInterval = null;
   const SCREENSHOT_REFRESH_INTERVAL_MS = 5000;
-
   let currentHierarchyData = null;
+  let isHierarchyLoading = false;
   let selectedNodePath = null;
+  let selectedNode = null;
+  let hoveredNode = null;
   let actualDeviceWidth = null;
   let actualDeviceHeight = null;
 
-  // --- API Helper (Direct Fetch) ---
+  const DEBUG_ELEMENT_FINDING = true;
+  let canvasTooltip = null;
+
+  function createCanvasTooltip() {
+    if (!document.getElementById("canvas-tooltip-id")) {
+      canvasTooltip = document.createElement("div");
+      canvasTooltip.id = "canvas-tooltip-id";
+      canvasTooltip.style.position = "absolute";
+      canvasTooltip.style.display = "none";
+      canvasTooltip.style.backgroundColor = "rgba(0, 0, 0, 0.85)";
+      canvasTooltip.style.color = "#f0f0f0";
+      canvasTooltip.style.padding = "8px 10px";
+      canvasTooltip.style.borderRadius = "5px";
+      canvasTooltip.style.fontSize = "12px";
+      canvasTooltip.style.fontFamily =
+        "Menlo, Monaco, Consolas, 'Courier New', monospace";
+      canvasTooltip.style.pointerEvents = "none";
+      canvasTooltip.style.zIndex = "10001";
+      canvasTooltip.style.border = "1px solid #555";
+      canvasTooltip.style.maxWidth = "380px"; // Slightly wider for potentially long XPaths
+      canvasTooltip.style.maxHeight = "220px";
+      canvasTooltip.style.overflowY = "auto";
+      canvasTooltip.style.wordBreak = "break-all";
+      canvasTooltip.style.lineHeight = "1.5";
+      if (deviceScreenContainer) {
+        deviceScreenContainer.appendChild(canvasTooltip);
+        if (DEBUG_ELEMENT_FINDING)
+          console.log(
+            "Tooltip: Created and appended to deviceScreenContainer.",
+          );
+      } else {
+        console.error("CRITICAL: deviceScreenContainer not found for tooltip.");
+      }
+    } else {
+      canvasTooltip = document.getElementById("canvas-tooltip-id");
+    }
+  }
+
   async function callBackend(
     method,
     endpoint,
     body = null,
     expectBlob = false,
   ) {
-    console.log(
-      `callBackend: Requesting ${method} ${endpoint}`,
-      body ? { body } : "",
-    ); // Added: Log API calls
     const requestOptions = {
       method: method.toUpperCase(),
       cache: "no-cache",
       headers: {},
     };
-
     if (body) {
       requestOptions.headers["Content-Type"] = "application/json";
       requestOptions.body = JSON.stringify(body);
     }
-
     try {
       const response = await fetch(endpoint, requestOptions);
-      console.log(
-        `callBackend: Response received for ${method} ${endpoint}. Status: ${response.status}`,
-      ); // Added: Log response status
-
       if (!response.ok) {
-        let errorText = `HTTP error ${response.status}: ${response.statusText}`;
+        let errorText = `HTTP error ${response.status}`;
         try {
-          const errorData = await response.json();
-          console.warn(
-            `callBackend: Error data from backend for ${method} ${endpoint}:`,
-            errorData,
-          ); // Added: Log error data
-          if (errorData && (errorData.error || errorData.detail)) {
-            errorText = `Error: ${errorData.error || errorData.detail} (Status: ${response.status})`;
-          }
-        } catch (e) {
-          console.warn(
-            `callBackend: Could not parse error response as JSON for ${method} ${endpoint}.`,
-          );
-        }
+          const errData = await response.json();
+          errorText = `Error: ${errData.error || errData.detail || response.statusText}`;
+        } catch (e) {}
         console.error(
-          `callBackend: Backend Error for ${method} ${endpoint}:`,
-          errorText,
+          `callBackend Error (${method} ${endpoint}): ${errorText}`,
         );
         throw new Error(errorText);
       }
       const contentType = response.headers.get("content-type");
-      console.log(
-        `callBackend: Response Content-Type for ${method} ${endpoint}: ${contentType}`,
-      ); // Added: Log content type
-
-      if (expectBlob) {
-        if (contentType && contentType.startsWith("image/")) {
-          console.log(
-            `callBackend: Expecting blob and got image for ${method} ${endpoint}. Returning blob.`,
-          );
-          return response.blob();
-        }
-        console.warn(
-          `callBackend: Expected blob for ${method} ${endpoint}, but got ${contentType}. Trying text.`,
-        );
-        return response.text();
-      } else if (contentType && contentType.includes("application/json")) {
-        console.log(
-          `callBackend: Expecting JSON and got JSON for ${method} ${endpoint}. Returning json().`,
-        );
+      if (expectBlob && contentType && contentType.startsWith("image/"))
+        return response.blob();
+      if (contentType && contentType.includes("application/json"))
         return response.json();
-      } else if (
-        contentType &&
-        (contentType.includes("text/plain") ||
-          contentType.includes("text/html"))
-      ) {
-        // Allow text/html too
-        console.log(
-          `callBackend: Got text content for ${method} ${endpoint}. Returning text().`,
-        );
-        return response.text();
-      } else {
-        console.warn(
-          `callBackend: Unexpected content type "${contentType}" for ${method} ${endpoint}. Reading as text.`,
-        );
-        return response.text();
-      }
+      return response.text();
     } catch (error) {
       console.error(
-        `callBackend: Fetch Error for ${method} ${endpoint}:`,
-        error,
+        `callBackend Fetch Exception (${method} ${endpoint}):`,
+        error.message,
       );
-      if (messageArea) {
-        // Check if messageArea exists
-        messageArea.innerHTML = `<span style='color: red;'>Network/Server Error: ${error.message}. Check server logs.</span>`;
-      }
+      if (messageArea)
+        messageArea.innerHTML = `<span style='color: red;'>API Error: ${error.message.substring(0, 100)}</span>`;
       throw error;
     }
   }
 
-  // --- Device Management ---
-  async function loadDeviceList() {
-    console.log("loadDeviceList: Function CALLED."); // 1. Start of function
-
-    if (!deviceSelect) {
-      // Re-check deviceSelect as it's critical here
-      console.error(
-        "loadDeviceList: CRITICAL - deviceSelect element is null or undefined here! Cannot proceed.",
-      );
-      if (messageArea)
-        messageArea.textContent =
-          "Frontend Error: Device select element not found.";
+  function setupOverlayCanvas() {
+    if (
+      !deviceScreenImg ||
+      !overlayCanvas ||
+      !overlayCtx ||
+      !deviceScreenContainer
+    )
       return;
-    }
-    console.log("loadDeviceList: deviceSelect element IS available."); // 2. Element found (or confirmed from global)
-
-    if (messageArea) messageArea.textContent = "Loading devices...";
-    deviceSelect.disabled = true;
-
-    try {
-      console.log(
-        "loadDeviceList: TRY block entered. Calling backend for /api/android/list...",
-      ); // 3. Before fetch
-      const data = await callBackend("GET", "/api/android/list");
-      // Using a different variable name here to avoid confusion with the global 'devices' before assignment
-      console.log(
-        "loadDeviceList: Backend call FINISHED. Raw data received from /api/android/list:",
-        JSON.stringify(data),
-      ); // 4. After fetch - VERY IMPORTANT
-
-      if (data === null) {
-        console.warn("loadDeviceList: Data from backend is null.");
-      } else if (data === undefined) {
-        console.warn("loadDeviceList: Data from backend is undefined.");
-      } else if (typeof data === "string") {
-        console.warn("loadDeviceList: Data from backend is a STRING:", data);
-        // It's possible callBackend already tried to parse it if content-type was wrong.
-        // If it's still a string here, it implies text/plain or similar was returned for /api/android/list
-      } else if (typeof data === "object" && !Array.isArray(data)) {
-        console.warn(
-          "loadDeviceList: Data from backend is an OBJECT, not an array:",
-          JSON.stringify(data),
-        );
-      } else if (Array.isArray(data)) {
-        console.log(
-          "loadDeviceList: Data from backend IS an ARRAY. Length:",
-          data.length,
-        );
-      }
-
-      devices = data || []; // Assign to global 'devices'
-      // Ensure 'devices' is an array after the assignment. If 'data' was not an array and not falsy, 'devices' would be 'data'.
-      if (!Array.isArray(devices)) {
-        console.error(
-          "loadDeviceList: CRITICAL - 'devices' is NOT AN ARRAY after assignment from 'data'. Value:",
-          JSON.stringify(devices),
-        );
-        // If devices is not an array, populateDeviceDropdown will fail.
-        // Set a specific error and stop.
-        deviceSelect.innerHTML =
-          '<option value="">Error: Invalid device data format</option>';
-        if (messageArea)
-          messageArea.textContent =
-            "Error: Invalid device data received from server.";
-        devices = []; // Reset to empty array to prevent further errors
-      } else {
-        console.log(
-          "loadDeviceList: 'devices' variable successfully set as array:",
-          JSON.stringify(devices),
-        ); // 5. After `devices` is set
-      }
-      console.log(
-        "loadDeviceList: Type of 'devices' now:",
-        typeof devices,
-        "Is Array?",
-        Array.isArray(devices),
-      ); // 6. Type check
-
-      populateDeviceDropdown(devices);
-      console.log("loadDeviceList: populateDeviceDropdown CALLED."); // 7. After populate
-
-      if (devices && devices.length > 0) {
-        console.log(
-          "loadDeviceList: Devices available. Count:",
-          devices.length,
-        ); // 8. Devices available
-        const lastSerial = localStorage.getItem("lastSelectedDeviceSerial");
-        let deviceFoundToSelect = devices.some((d) => d.serial === lastSerial);
-
-        deviceSelect.value =
-          lastSerial && deviceFoundToSelect ? lastSerial : devices[0].serial;
-        console.log(
-          "loadDeviceList: deviceSelect.value set to:",
-          deviceSelect.value,
-        );
-        if (messageArea)
-          messageArea.textContent = "Select a device or refresh hierarchy.";
-      } else {
-        console.warn(
-          "loadDeviceList: No devices found or 'devices' is empty after processing 'data'.",
-        ); // 9. No devices
-        // This should be handled by populateDeviceDropdown if devices is an empty array.
-        // If populateDeviceDropdown was skipped due to non-array, this message might be more relevant.
-        if (messageArea)
-          messageArea.textContent =
-            "No Android devices found. Connect a device and ensure ADB is working.";
-        clearDeviceInfo(); // This also clears a lot of UI
-      }
-      await handleDeviceSelectionChange(); // This might run even if no devices, need to check its logic
-      console.log("loadDeviceList: handleDeviceSelectionChange CALLED."); // 10. End of try
-    } catch (error) {
-      console.error("loadDeviceList: CATCH block executed!"); // 11. CATCH BLOCK
-      console.error("Error in loadDeviceList (raw error object):", error);
-      // Attempt to stringify the error to see its properties
-      try {
-        console.log(
-          "loadDeviceList error object stringified:",
-          JSON.stringify(error, Object.getOwnPropertyNames(error)),
-        );
-      } catch (e) {
-        console.log(
-          "loadDeviceList: Could not stringify error object. Message:",
-          error.message,
-          "Stack:",
-          error.stack,
-        );
-      }
-
-      if (deviceSelect) {
-        // Check if deviceSelect is still valid
-        deviceSelect.innerHTML =
-          '<option value="">Error loading devices (JS catch)</option>';
-      } else {
-        console.error(
-          "loadDeviceList: CATCH BLOCK - deviceSelect element is NULL or undefined here!",
-        );
-      }
-      if (messageArea) {
-        messageArea.textContent = `Error loading devices (catch): ${error.message || "Unknown error"}`;
-      }
-    } finally {
-      console.log("loadDeviceList: FINALLY block executed."); // 12. FINALLY
-      if (deviceSelect) {
-        // Check if deviceSelect is still valid
-        deviceSelect.disabled = false;
-      }
-    }
-  }
-
-  function populateDeviceDropdown(deviceData) {
-    console.log(
-      "populateDeviceDropdown: CALLED with deviceData:",
-      JSON.stringify(deviceData),
-    ); // P1. Entry
-
-    if (!deviceSelect) {
-      // Use the global deviceSelect, assuming it was found at DOMContentLoaded
-      console.error(
-        "populateDeviceDropdown: CRITICAL - deviceSelect element is NULL or undefined! Cannot populate.",
-      );
-      return;
-    }
-
-    deviceSelect.innerHTML = ""; // Clear previous options
-    if (!deviceData || !Array.isArray(deviceData) || deviceData.length === 0) {
-      console.warn(
-        "populateDeviceDropdown: deviceData is not a valid array or is empty. Setting 'No devices found'.",
-      ); // P2. No data
-      deviceSelect.innerHTML = '<option value="">No devices found</option>';
-      return;
-    }
-
-    console.log(
-      "populateDeviceDropdown: deviceData is a valid array, proceeding to create options. Length:",
-      deviceData.length,
-    ); // P3. Valid data
-    try {
-      deviceData.forEach((device, index) => {
-        console.log(
-          `populateDeviceDropdown: Processing device ${index}:`,
-          JSON.stringify(device),
-        ); // P4. Each device
-        if (typeof device !== "object" || device === null) {
-          console.warn(
-            `populateDeviceDropdown: Device at index ${index} is not an object or is null:`,
-            device,
-          );
-          return; // Skip this iteration of forEach (continue to next)
-        }
-        if (!device.serial) {
-          console.warn(
-            `populateDeviceDropdown: Device at index ${index} is missing 'serial' property:`,
-            device,
-          );
-          // Optionally, skip or provide a default value. For now, it will result in option.value being undefined.
-        }
-        const option = document.createElement("option");
-        option.value = device.serial;
-        console.log(
-          `populateDeviceDropdown: Device ${index} serial for option.value: '${device.serial}'`,
-        ); // P5. Serial
-        option.textContent = `${device.model || device.serial || "Unknown Device"} (SDK: ${device.sdkVersion || "N/A"}, ID: ${device.id || "N/A"})`;
-        deviceSelect.appendChild(option);
-      });
-      console.log("populateDeviceDropdown: FINISHED creating options."); // P6. Finish
-    } catch (e) {
-      console.error(
-        "populateDeviceDropdown: ERROR during forEach loop or option creation:",
-        e,
-      ); // P7. Error in loop
-      deviceSelect.innerHTML =
-        '<option value="">Error processing device data</option>';
-    }
-  }
-
-  function clearDeviceInfo() {
-    console.log("clearDeviceInfo: CALLED"); // Added log
-    if (deviceSerialEl) deviceSerialEl.textContent = "N/A";
-    if (deviceModelEl) deviceModelEl.textContent = "N/A";
-    if (deviceSdkEl) deviceSdkEl.textContent = "N/A";
-    if (deviceScreenImg) {
-      deviceScreenImg.src =
-        "https://placehold.co/360x640/e9e9e9/777?text=No+Device+Selected";
-      deviceScreenImg.alt = "No Device Selected";
-    }
-    currentHierarchyData = null;
-    if (hierarchyTreeViewEl)
-      hierarchyTreeViewEl.innerHTML =
-        "No device selected or hierarchy not loaded.";
-    if (elementPropertiesViewEl)
-      elementPropertiesViewEl.innerHTML = "Select an element.";
-    if (generatedXpathEl) generatedXpathEl.value = "";
-    stopScreenshotAutoRefresh();
-    hideHighlightBox();
-  }
-
-  async function handleDeviceSelectionChange() {
-    console.log("handleDeviceSelectionChange: CALLED"); // Added log
-    if (!deviceSelect) {
-      console.error(
-        "handleDeviceSelectionChange: deviceSelect element is not available!",
-      );
-      return;
-    }
-    currentDeviceSerial = deviceSelect.value;
-    console.log(
-      "handleDeviceSelectionChange: currentDeviceSerial set to:",
-      currentDeviceSerial,
-    ); // Added log
-    localStorage.setItem("lastSelectedDeviceSerial", currentDeviceSerial);
-
-    if (currentDeviceSerial) {
-      const selectedDevice = devices.find(
-        // Ensure 'devices' is the global array
-        (d) => d.serial === currentDeviceSerial,
-      );
-      console.log(
-        "handleDeviceSelectionChange: selectedDevice object:",
-        JSON.stringify(selectedDevice),
-      ); // Added log
-      if (selectedDevice) {
-        if (deviceSerialEl) deviceSerialEl.textContent = selectedDevice.serial;
-        if (deviceModelEl)
-          deviceModelEl.textContent = selectedDevice.model || "Unknown";
-        if (deviceSdkEl)
-          deviceSdkEl.textContent = selectedDevice.sdkVersion || "Unknown"; // sdkVersion might be undefined
-        if (messageArea)
-          messageArea.textContent = `Selected device: ${selectedDevice.model || selectedDevice.serial}.`;
-      } else {
-        console.warn(
-          "handleDeviceSelectionChange: No selectedDevice found in 'devices' array for serial:",
-          currentDeviceSerial,
-        );
-        // This case might occur if the dropdown is somehow out of sync with the `devices` array
-        if (messageArea)
-          messageArea.textContent = `Device ${currentDeviceSerial} details not found.`;
-      }
-
-      // Check if the inspector tab is active for fetching hierarchy
-      const inspectorTabElement = document.getElementById("inspector-tab");
-      const isInspectorTabActive =
-        inspectorTabElement && inspectorTabElement.classList.contains("active");
-      console.log(
-        "handleDeviceSelectionChange: Is inspector tab active?",
-        isInspectorTabActive,
-      );
-
-      // It's generally safer to call these after confirming a device is truly selected and valid
-      await fetchAndDisplayScreenshot();
-      await fetchDeviceWindowSize();
-      startScreenshotAutoRefresh();
-
-      if (isInspectorTabActive) {
-        console.log(
-          "handleDeviceSelectionChange: Inspector tab is active, fetching hierarchy.",
-        );
-        await fetchAndRenderHierarchy();
-      } else {
-        console.log(
-          "handleDeviceSelectionChange: Inspector tab NOT active, hierarchy not fetched on selection change.",
-        );
-      }
-    } else {
-      console.log(
-        "handleDeviceSelectionChange: No currentDeviceSerial. Clearing device info.",
-      ); // Added log
-      clearDeviceInfo();
-      if (messageArea) messageArea.textContent = "No device selected.";
-    }
-  }
-
-  async function fetchDeviceWindowSize() {
-    console.log(
-      "fetchDeviceWindowSize: CALLED for serial:",
-      currentDeviceSerial,
-    ); // Added log
-    if (!currentDeviceSerial) return;
-    try {
-      console.warn(
-        "fetchDeviceWindowSize: Needs a reliable way to get actual device dimensions. Placeholder logic.",
-      );
-    } catch (error) {
-      console.error("Error fetching device window size:", error);
-    }
-  }
-
-  async function fetchAndDisplayScreenshot() {
-    console.log(
-      "fetchAndDisplayScreenshot: CALLED for serial:",
-      currentDeviceSerial,
-    ); // Added log
-    if (!currentDeviceSerial) {
-      console.log(
-        "fetchAndDisplayScreenshot: No current device serial, returning.",
-      );
-      return;
-    }
-    if (!deviceScreenImg) {
-      console.error(
-        "fetchAndDisplayScreenshot: deviceScreenImg element not found!",
-      );
-      return;
-    }
-    const timestamp = new Date().getTime();
-    try {
-      const blob = await callBackend(
-        "GET",
-        `/api/android/${currentDeviceSerial}/screenshot/0?t=${timestamp}`,
-        null,
-        true,
-      );
-      if (blob instanceof Blob) {
-        console.log(
-          "fetchAndDisplayScreenshot: Screenshot blob received, size:",
-          blob.size,
-        ); // Added log
-        deviceScreenImg.src = URL.createObjectURL(blob);
-        deviceScreenImg.alt = `Device Screen (${currentDeviceSerial})`;
+    if (deviceScreenImg.naturalWidth === 0 || !deviceScreenImg.complete) {
+      if (!deviceScreenImg.onloadAttached) {
         deviceScreenImg.onload = () => {
-          console.log(
-            `Screenshot displayed: ${deviceScreenImg.clientWidth}x${deviceScreenImg.clientHeight}, natural: ${deviceScreenImg.naturalWidth}x${deviceScreenImg.naturalHeight}`,
-          );
-          if (!actualDeviceWidth || !actualDeviceHeight) {
-            actualDeviceWidth = deviceScreenImg.naturalWidth;
-            actualDeviceHeight = deviceScreenImg.naturalHeight;
-            console.log(
-              `Using screenshot natural dimensions for device size: ${actualDeviceWidth}x${actualDeviceHeight}`,
-            );
-          }
+          deviceScreenImg.onloadAttached = false;
+          setupOverlayCanvas();
         };
-        deviceScreenImg.onerror = () => {
-          // Added: log if image fails to load from blob URL
-          console.error(
-            "fetchAndDisplayScreenshot: Error loading image from blob URL:",
-            deviceScreenImg.src,
-          );
-        };
-      } else {
-        console.warn(
-          "fetchAndDisplayScreenshot: Screenshot data was not a Blob. Received:",
-          blob,
-        ); // Added log
-        deviceScreenImg.src =
-          "https://placehold.co/360x640/e9e9e9/777?text=No+Screenshot+Data";
+        deviceScreenImg.onloadAttached = true;
       }
-    } catch (error) {
-      console.error(
-        "fetchAndDisplayScreenshot: Error fetching or displaying screenshot:",
-        error,
-      ); // Added log
-      deviceScreenImg.alt = "Error loading screenshot";
-      deviceScreenImg.src =
-        "https://placehold.co/360x640/e9e9e9/777?text=Error+Loading+Screen";
+      return;
+    }
+    const containerWidth = deviceScreenContainer.clientWidth;
+    const containerHeight = deviceScreenContainer.clientHeight;
+    const imgNaturalWidth = deviceScreenImg.naturalWidth;
+    const imgNaturalHeight = deviceScreenImg.naturalHeight;
+    let displayWidth = imgNaturalWidth;
+    let displayHeight = imgNaturalHeight;
+    if (displayWidth === 0 || displayHeight === 0) return;
+    const imgAspectRatio = imgNaturalWidth / imgNaturalHeight;
+    const containerAspectRatio = containerWidth / containerHeight;
+    if (imgAspectRatio > containerAspectRatio) {
+      displayWidth = containerWidth;
+      displayHeight = containerWidth / imgAspectRatio;
+    } else {
+      displayHeight = containerHeight;
+      displayWidth = containerHeight * imgAspectRatio;
+    }
+    deviceScreenImg.style.width = `${displayWidth}px`;
+    deviceScreenImg.style.height = `${displayHeight}px`;
+    overlayCanvas.width = displayWidth;
+    overlayCanvas.height = displayHeight;
+    drawNodeOverlays();
+  }
+
+  function drawNodeOverlays() {
+    if (!overlayCtx || !overlayCanvas || overlayCanvas.width === 0) return;
+    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    if (!currentHierarchyData) {
+      if (DEBUG_ELEMENT_FINDING)
+        console.warn(
+          "drawNodeOverlays: currentHierarchyData is null, cannot draw overlays.",
+        );
+      return;
+    }
+
+    function processNode(node) {
+      if (
+        node &&
+        node.bounds &&
+        node.bounds.length === 4 &&
+        node.bounds.every((b) => typeof b === "number" && !isNaN(b))
+      ) {
+        const [x1_rel, y1_rel, x2_rel, y2_rel] = node.bounds;
+        const rectX = x1_rel * overlayCanvas.width;
+        const rectY = y1_rel * overlayCanvas.height;
+        const rectW = (x2_rel - x1_rel) * overlayCanvas.width;
+        const rectH = (y2_rel - y1_rel) * overlayCanvas.height;
+
+        if (rectW <= 0 || rectH <= 0) {
+          // Do not draw zero-area or negative-area boxes
+          // if(DEBUG_ELEMENT_FINDING) console.log("drawNodeOverlays: Skipping node with zero/negative area:", node.name, node.key, "W:", rectW, "H:", rectH);
+          return;
+        }
+        overlayCtx.beginPath();
+        overlayCtx.rect(rectX, rectY, rectW, rectH);
+
+        let styleApplied = false;
+        if (selectedNode && selectedNode.key === node.key) {
+          overlayCtx.strokeStyle = "rgba(255,0,0,0.9)";
+          overlayCtx.lineWidth = 2;
+          if (DEBUG_ELEMENT_FINDING)
+            console.log(
+              `DRAW_SELECTED: Preparing to stroke selected ${node.name} (Key:${node.key}) at [${rectX.toFixed(1)},${rectY.toFixed(1)},${rectW.toFixed(1)},${rectH.toFixed(1)}] with ${overlayCtx.strokeStyle}`,
+            );
+          styleApplied = true;
+        } else if (hoveredNode && hoveredNode.key === node.key) {
+          overlayCtx.strokeStyle = "rgba(0,120,255,0.9)";
+          overlayCtx.lineWidth = 2;
+          styleApplied = true;
+        } else {
+          overlayCtx.strokeStyle = "rgba(150,150,150,0.4)";
+          overlayCtx.lineWidth = 1;
+          // No need to set styleApplied = true for default, only for specific highlights
+        }
+        overlayCtx.stroke();
+      }
+      if (node && node.children) node.children.forEach(processNode);
+    }
+    processNode(currentHierarchyData);
+  }
+
+  function updateAndShowTooltip(node, pageX, pageY) {
+    if (!canvasTooltip) createCanvasTooltip();
+    if (!canvasTooltip || !node || !deviceScreenContainer) {
+      if (DEBUG_ELEMENT_FINDING)
+        console.warn(
+          "Tooltip: updateAndShowTooltip - Prerequisites not met (canvasTooltip, node, or deviceScreenContainer). Node:",
+          node,
+        );
+      hideTooltip();
+      return;
+    }
+    // if (DEBUG_ELEMENT_FINDING) console.log("Tooltip: updateAndShowTooltip - Updating for node:", node.name, "Key:", node.key, "at mouse", pageX, pageY);
+    try {
+      const name = node.name || "Unnamed";
+      let rectInfo = "Rect (Device): N/A";
+      if (node.rect && typeof node.rect.x === "number") {
+        rectInfo = `[${node.rect.x}, ${node.rect.y}, ${node.rect.width}, ${node.rect.height}]`;
+      } else if (node.bounds && actualDeviceWidth && actualDeviceHeight) {
+        const devX = Math.round(node.bounds[0] * actualDeviceWidth);
+        const devY = Math.round(node.bounds[1] * actualDeviceHeight);
+        const devW = Math.round(
+          (node.bounds[2] - node.bounds[0]) * actualDeviceWidth,
+        );
+        const devH = Math.round(
+          (node.bounds[3] - node.bounds[1]) * actualDeviceHeight,
+        );
+        rectInfo = `~[${devX}, ${devY}, ${devW}, ${devH}] (Est. Device)`;
+      }
+      const contentDesc = node.properties?.["content-desc"] || "N/A";
+      const resourceId = node.properties?.["resource-id"] || "N/A";
+      const xpath = generateBasicXPath(node) || "N/A";
+      canvasTooltip.innerHTML = `
+        <div style="margin-bottom:3px; font-weight:bold; color:#92c9ff;">${escapeHtml(name)}</div>
+        <div style="margin-bottom:3px;">${escapeHtml(rectInfo)}</div>
+        <div style="margin-bottom:3px;"><span style="color:#888;">Desc:</span> ${escapeHtml(contentDesc)}</div>
+        <div style="margin-bottom:3px;"><span style="color:#888;">ID:</span> ${escapeHtml(resourceId)}</div>
+        <div><span style="color:#888;">XPath:</span> ${escapeHtml(xpath)}</div>`;
+      const containerRect = deviceScreenContainer.getBoundingClientRect();
+      let targetX = pageX - containerRect.left + 25; // 25px to the right of cursor
+      let targetY = pageY - containerRect.top + 15; // 15px below cursor
+      if (
+        targetX + canvasTooltip.offsetWidth >
+        deviceScreenContainer.clientWidth - 10
+      ) {
+        // 10px padding from edge
+        targetX = pageX - containerRect.left - canvasTooltip.offsetWidth - 25; // Try 25px left of cursor
+      }
+      if (targetX < 5) targetX = 5;
+      if (
+        targetY + canvasTooltip.offsetHeight >
+        deviceScreenContainer.clientHeight - 10
+      ) {
+        // 10px padding from edge
+        targetY = pageY - containerRect.top - canvasTooltip.offsetHeight - 15; // Try 15px above cursor
+      }
+      if (targetY < 5) targetY = 5;
+      canvasTooltip.style.left = `${Math.max(0, targetX)}px`;
+      canvasTooltip.style.top = `${Math.max(0, targetY)}px`;
+      canvasTooltip.style.display = "block";
+      // if (DEBUG_ELEMENT_FINDING) {
+      //   console.log("Tooltip: Displayed. Content:", canvasTooltip.textContent.replace(/\s\s+/g, ' ').substring(0,100)+"...");
+      //   console.log("Tooltip: Style - top:", canvasTooltip.style.top, "left:", canvasTooltip.style.left, "display:", canvasTooltip.style.display);
+      // }
+    } catch (e) {
+      console.error("Error in updateAndShowTooltip:", e, "for node:", node);
+      hideTooltip();
+    }
+  }
+  function hideTooltip() {
+    if (canvasTooltip) {
+      // if (DEBUG_ELEMENT_FINDING && canvasTooltip.style.display !== 'none') console.log("Tooltip: Hiding tooltip.");
+      canvasTooltip.style.display = "none";
     }
   }
 
   function startScreenshotAutoRefresh() {
-    console.log("startScreenshotAutoRefresh: CALLED"); // Added log
-    stopScreenshotAutoRefresh(); // Clear any existing interval
+    stopScreenshotAutoRefresh();
     if (currentDeviceSerial) {
-      console.log(
-        "startScreenshotAutoRefresh: Starting auto-refresh for serial:",
-        currentDeviceSerial,
-      );
-      fetchAndDisplayScreenshot(); // Initial fetch
+      fetchAndDisplayScreenshot();
       screenshotInterval = setInterval(
         fetchAndDisplayScreenshot,
         SCREENSHOT_REFRESH_INTERVAL_MS,
       );
-    } else {
-      console.log(
-        "startScreenshotAutoRefresh: No current device serial, auto-refresh not started.",
-      );
     }
   }
   function stopScreenshotAutoRefresh() {
-    if (screenshotInterval) {
-      console.log("stopScreenshotAutoRefresh: Clearing screenshot interval."); // Added log
-      clearInterval(screenshotInterval);
-      screenshotInterval = null;
+    if (screenshotInterval) clearInterval(screenshotInterval);
+    screenshotInterval = null;
+  }
+  async function loadDeviceList() {
+    if (messageArea) messageArea.textContent = "Loading devices...";
+    if (deviceSelect) deviceSelect.disabled = true;
+    try {
+      const data = await callBackend("GET", "/api/android/list");
+      devices = Array.isArray(data) ? data : [];
+      populateDeviceDropdown(devices);
+      if (devices.length > 0) {
+        const lastSerial = localStorage.getItem("lastSelectedDeviceSerial");
+        const deviceToSelect =
+          devices.find((d) => d.serial === lastSerial) || devices[0];
+        if (deviceToSelect) deviceSelect.value = deviceToSelect.serial;
+        if (messageArea) messageArea.textContent = "Select a device.";
+      } else {
+        if (messageArea) messageArea.textContent = "No devices found.";
+        clearDeviceInfo();
+      }
+      await handleDeviceSelectionChange(); // This will trigger hierarchy load if needed
+    } catch (e) {
+      console.error("loadDeviceList CATCH:", e.message);
+      if (deviceSelect)
+        deviceSelect.innerHTML = `<option value="">Err:${e.message.substring(0, 20)}</option>`;
+      if (messageArea) messageArea.textContent = `Error: ${e.message}`;
+    } finally {
+      if (deviceSelect) deviceSelect.disabled = false;
+    }
+  }
+  function populateDeviceDropdown(deviceData) {
+    if (!deviceSelect) return;
+    deviceSelect.innerHTML = "";
+    if (!deviceData || deviceData.length === 0) {
+      deviceSelect.innerHTML = '<option value="">No devices</option>';
+      return;
+    }
+    deviceData.forEach((d) => {
+      const o = document.createElement("option");
+      o.value = d.serial;
+      o.textContent = `${d.model || d.serial || "Unknown"} (SDK:${d.sdkVersion || "N/A"})`;
+      deviceSelect.appendChild(o);
+    });
+  }
+  function clearDeviceInfo() {
+    stopScreenshotAutoRefresh();
+    if (overlayCtx)
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    hideTooltip();
+    currentDeviceSerial = null;
+    currentHierarchyData = null;
+    selectedNode = null;
+    selectedNodePath = null;
+    hoveredNode = null;
+    actualDeviceWidth = null;
+    actualDeviceHeight = null;
+    if (deviceScreenImg) {
+      deviceScreenImg.src =
+        "https://placehold.co/360x640/e9e9e9/777?text=NoDevice";
+      deviceScreenImg.style.width = "auto";
+      deviceScreenImg.style.height = "auto";
+    }
+    if (overlayCanvas) {
+      overlayCanvas.width = 0;
+      overlayCanvas.height = 0;
+    }
+    if (hierarchyTreeViewEl) hierarchyTreeViewEl.innerHTML = "No device.";
+    if (elementPropertiesViewEl) elementPropertiesViewEl.innerHTML = "";
+    if (generatedXpathEl) generatedXpathEl.value = "";
+  }
+
+  async function handleDeviceSelectionChange() {
+    if (!deviceSelect) return;
+    currentDeviceSerial = deviceSelect.value;
+    localStorage.setItem("lastSelectedDeviceSerial", currentDeviceSerial);
+    selectedNode = null;
+    selectedNodePath = null;
+    hoveredNode = null;
+    hideTooltip();
+    currentHierarchyData = null;
+    isHierarchyLoading = false;
+    if (overlayCtx)
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    if (currentDeviceSerial) {
+      if (messageArea)
+        messageArea.textContent = `Loading ${currentDeviceSerial}...`;
+      await fetchAndDisplayScreenshot();
+      const iTab = document.getElementById("inspector-tab");
+      if (iTab && iTab.classList.contains("active")) {
+        await fetchAndRenderHierarchy();
+      } else {
+        if (DEBUG_ELEMENT_FINDING)
+          console.log(
+            "Inspector tab not active on device change, hierarchy will load when tab is opened.",
+          );
+      }
+      startScreenshotAutoRefresh();
+    } else {
+      clearDeviceInfo();
+      if (messageArea) messageArea.textContent = "No device selected.";
+      stopScreenshotAutoRefresh();
+    }
+  }
+
+  async function fetchAndDisplayScreenshot() {
+    if (!currentDeviceSerial || !deviceScreenImg) return;
+    deviceScreenImg.removeAttribute("src");
+    deviceScreenImg.src =
+      "https://placehold.co/360x640/e9e9e9/777?text=Loading...";
+    if (overlayCtx)
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    const ts = new Date().getTime();
+    try {
+      const blob = await callBackend(
+        "GET",
+        `/api/android/${currentDeviceSerial}/screenshot/0?t=${ts}`,
+        null,
+        true,
+      );
+      if (blob instanceof Blob && blob.size > 0) {
+        deviceScreenImg.onload = () => {
+          deviceScreenImg.onloadAttached = false;
+          actualDeviceWidth = deviceScreenImg.naturalWidth;
+          actualDeviceHeight = deviceScreenImg.naturalHeight;
+          if (DEBUG_ELEMENT_FINDING)
+            console.log(
+              "SCREENSHOT: Loaded, actualDeviceWidth:",
+              actualDeviceWidth,
+              "actualDeviceHeight:",
+              actualDeviceHeight,
+            );
+          setupOverlayCanvas();
+        };
+        deviceScreenImg.onloadAttached = true;
+        deviceScreenImg.onerror = () => {
+          deviceScreenImg.src =
+            "https://placehold.co/360x640/e9e9e9/777?text=LoadErr";
+          setupOverlayCanvas();
+        };
+        deviceScreenImg.src = URL.createObjectURL(blob);
+      } else {
+        deviceScreenImg.onload = null;
+        deviceScreenImg.src =
+          "https://placehold.co/360x640/e9e9e9/777?text=NoData";
+        setupOverlayCanvas();
+      }
+    } catch (e) {
+      deviceScreenImg.onload = null;
+      deviceScreenImg.src =
+        "https://placehold.co/360x640/e9e9e9/777?text=FetchErr";
+      setupOverlayCanvas();
     }
   }
 
   async function fetchAndRenderHierarchy() {
-    console.log(
-      "fetchAndRenderHierarchy: CALLED for serial:",
-      currentDeviceSerial,
-    ); // Added log
-    if (!currentDeviceSerial) {
-      if (hierarchyTreeViewEl)
-        hierarchyTreeViewEl.innerHTML = "Please select a device.";
+    if (!currentDeviceSerial || !hierarchyTreeViewEl) {
+      if (DEBUG_ELEMENT_FINDING)
+        console.warn(
+          "HIERARCHY: Pre-conditions not met for fetch (no serial or tree view).",
+        );
       return;
     }
-    if (!hierarchyTreeViewEl || !elementPropertiesViewEl || !generatedXpathEl) {
-      console.error(
-        "fetchAndRenderHierarchy: One or more UI elements for hierarchy is missing!",
-      );
+    if (isHierarchyLoading) {
+      if (DEBUG_ELEMENT_FINDING)
+        console.warn("HIERARCHY: Fetch already in progress. Skipping.");
       return;
     }
-
+    if (DEBUG_ELEMENT_FINDING)
+      console.log("HIERARCHY: Starting fetchAndRenderHierarchy...");
+    isHierarchyLoading = true;
     hierarchyTreeViewEl.innerHTML = "Loading hierarchy...";
-    elementPropertiesViewEl.innerHTML = "Select an element.";
-    generatedXpathEl.value = "";
-    hideHighlightBox();
-
+    currentHierarchyData = null;
+    if (overlayCtx)
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     try {
-      const hierarchyData = await callBackend(
+      const hData = await callBackend(
         "GET",
         `/api/android/${currentDeviceSerial}/hierarchy?format=json`,
       );
-      console.log(
-        "fetchAndRenderHierarchy: Hierarchy data received:",
-        JSON.stringify(hierarchyData).substring(0, 500) + "...",
-      ); // Log snippet
-
-      if (
-        hierarchyData &&
-        typeof hierarchyData === "object" &&
-        hierarchyData.name
-      ) {
-        // Check if it's an object and has a 'name' (root node)
-        currentHierarchyData = hierarchyData;
-        if (currentHierarchyData.rect) {
-          actualDeviceWidth =
-            currentHierarchyData.rect.width + currentHierarchyData.rect.x;
-          actualDeviceHeight =
-            currentHierarchyData.rect.height + currentHierarchyData.rect.y;
-          console.log(
-            `Device dimensions from hierarchy root: ${actualDeviceWidth}x${actualDeviceHeight}`,
-          );
-        } else if (
-          currentHierarchyData.properties &&
-          currentHierarchyData.properties.bounds
+      if (hData && typeof hData === "object" && hData.name) {
+        currentHierarchyData = hData;
+        if (
+          hData.rect &&
+          typeof hData.rect.width === "number" &&
+          typeof hData.rect.height === "number"
         ) {
-          const boundsStr = currentHierarchyData.properties.bounds;
-          const coords = boundsStr.match(/\d+/g);
-          if (coords && coords.length === 4) {
-            actualDeviceWidth = parseInt(coords[2]);
-            actualDeviceHeight = parseInt(coords[3]);
-            console.log(
-              `Device dimensions from hierarchy root properties.bounds: ${actualDeviceWidth}x${actualDeviceHeight}`,
-            );
-          }
+          // Only set actualDeviceWidth/Height from hierarchy if not already set by screenshot (which is usually more accurate for physical pixels)
+          if (!actualDeviceWidth && hData.rect.width > 0)
+            actualDeviceWidth = hData.rect.x + hData.rect.width;
+          if (!actualDeviceHeight && hData.rect.height > 0)
+            actualDeviceHeight = hData.rect.y + hData.rect.height;
         }
-        renderHierarchyTree(
-          currentHierarchyData,
-          hierarchyTreeViewEl,
-          currentHierarchyData.key,
-        );
+        if (
+          deviceScreenImg &&
+          deviceScreenImg.naturalWidth === 0 &&
+          actualDeviceWidth &&
+          actualDeviceHeight
+        )
+          setupOverlayCanvas();
+        renderHierarchyTree(currentHierarchyData, hierarchyTreeViewEl);
         if (messageArea)
           messageArea.textContent =
-            "Hierarchy loaded. Click on elements to inspect.";
+            "Hierarchy loaded. You can now interact with the screen.";
+        drawNodeOverlays();
+        if (DEBUG_ELEMENT_FINDING)
+          console.log(
+            "HIERARCHY: Successfully fetched and rendered. currentHierarchyData is SET.",
+          );
       } else {
-        console.warn(
-          "fetchAndRenderHierarchy: Failed to load valid hierarchy data or data is empty/not an object. Received:",
-          hierarchyData,
-        ); // Added log
-        if (hierarchyTreeViewEl)
-          hierarchyTreeViewEl.innerHTML =
-            "Failed to load hierarchy or data is empty.";
+        console.error(
+          "HIERARCHY: Failed to load or parse hierarchy data. Response:",
+          hData,
+        );
+        hierarchyTreeViewEl.innerHTML =
+          "Failed to load hierarchy. Check console for details.";
         currentHierarchyData = null;
+        if (messageArea) messageArea.textContent = "Failed to load hierarchy.";
+        if (overlayCtx)
+          overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
       }
-    } catch (error) {
-      console.error("fetchAndRenderHierarchy: Error loading hierarchy:", error); // Added log
-      if (hierarchyTreeViewEl)
-        hierarchyTreeViewEl.innerHTML = `Error loading hierarchy: ${error.message}`;
-      currentHierarchyData = null;
-    }
-  }
-
-  function renderHierarchyTree(node, parentElement, currentPath) {
-    // node.key is used as currentPath now
-    // console.log("renderHierarchyTree: CALLED for node path:", node ? node.key : "null node"); // Can be very verbose
-    if (!node) return;
-    if (parentElement === hierarchyTreeViewEl) {
-      parentElement.innerHTML = "";
-    }
-
-    const li = document.createElement("li");
-    let nodeText = `${node.name || "Unknown Node"}`; // Ensure some text even if name is missing
-    if (node.properties) {
-      if (node.properties["resource-id"]) {
-        nodeText += ` <span class="node-details">(id: ${node.properties["resource-id"].split("/").pop()})</span>`;
-      } else if (node.properties["text"]) {
-        let text = node.properties["text"];
-        if (text.length > 30) text = text.substring(0, 27) + "...";
-        nodeText += ` <span class="node-details">(text: "${escapeHtml(text)}")</span>`; // Escape text here too
-      }
-    }
-    li.innerHTML = nodeText;
-    li.dataset.nodePath = node.key;
-
-    if (node.key === selectedNodePath) {
-      li.classList.add("selected-node");
-    }
-
-    li.addEventListener("click", (event) => {
-      event.stopPropagation();
-      console.log("renderHierarchyTree: Node clicked. Path:", node.key); // Added log
-      selectedNodePath = node.key;
-      displayNodeProperties(node);
-      highlightElementOnScreen(node);
-      // Re-rendering the whole tree on click is inefficient but ensures selection highlight.
-      // For large hierarchies, this could be slow. Consider a more targeted update.
-      if (currentHierarchyData) {
-        // Ensure currentHierarchyData is available
-        renderHierarchyTree(
-          currentHierarchyData,
-          hierarchyTreeViewEl,
-          currentHierarchyData.key,
-        );
-      } else {
-        console.warn(
-          "renderHierarchyTree click handler: currentHierarchyData is null, cannot re-render tree.",
-        );
-      }
-    });
-
-    parentElement.appendChild(li);
-
-    if (node.children && node.children.length > 0) {
-      const childrenUl = document.createElement("ul");
-      li.appendChild(childrenUl);
-      node.children.forEach((childNode) => {
-        // No need for index if childNode.key is absolute
-        renderHierarchyTree(childNode, childrenUl, childNode.key);
-      });
-    }
-  }
-
-  function displayNodeProperties(node) {
-    console.log(
-      "displayNodeProperties: CALLED for node path:",
-      node ? node.key : "null node",
-    ); // Added log
-    if (!elementPropertiesViewEl || !generatedXpathEl) {
+    } catch (e) {
       console.error(
-        "displayNodeProperties: Properties or XPath element not found!",
+        "HIERARCHY: Exception during fetchAndRenderHierarchy:",
+        e.message,
       );
-      return;
+      hierarchyTreeViewEl.innerHTML = `Error loading hierarchy: ${e.message.substring(0, 100)}`;
+      currentHierarchyData = null;
+      if (messageArea) messageArea.textContent = `Error loading hierarchy.`;
+      if (overlayCtx)
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    } finally {
+      isHierarchyLoading = false;
+      if (DEBUG_ELEMENT_FINDING)
+        console.log(
+          "HIERARCHY: fetchAndRenderHierarchy finished. Loading flag reset.",
+        );
     }
+  }
+
+  function renderHierarchyTree(node, parentElement) {
+    /* ... (same) ... */
+    if (!node) return;
+    if (parentElement === hierarchyTreeViewEl) parentElement.innerHTML = "";
+    const li = document.createElement("li");
+    let txt = `${node.name || "Node"}`;
+    if (node.properties) {
+      if (node.properties["resource-id"])
+        txt += ` <small>(id:${node.properties["resource-id"].split("/").pop()})</small>`;
+      else if (node.properties["text"])
+        txt += ` <small>(text:"${escapeHtml((node.properties["text"] || "").substring(0, 20))}")</small>`;
+    }
+    li.innerHTML = txt;
+    li.dataset.nodePath = node.key;
+    if (node.key === selectedNodePath) li.classList.add("selected-node");
+    li.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      selectedNodePath = node.key;
+      selectedNode = node;
+      if (DEBUG_ELEMENT_FINDING)
+        console.log(
+          `HIERARCHY_CLICK: Tree node selected - ${selectedNode ? selectedNode.name : "None"} (Key: ${node.key})`,
+        );
+      displayNodeProperties(node);
+      drawNodeOverlays();
+      const currentlySelectedLi =
+        hierarchyTreeViewEl.querySelector("li.selected-node");
+      if (currentlySelectedLi)
+        currentlySelectedLi.classList.remove("selected-node");
+      li.classList.add("selected-node");
+    });
+    parentElement.appendChild(li);
+    if (node.children) node.children.forEach((c) => renderHierarchyTree(c, li));
+  }
+  function displayNodeProperties(node) {
+    /* ... (same) ... */
+    if (!elementPropertiesViewEl || !generatedXpathEl) return;
     if (!node) {
       elementPropertiesViewEl.innerHTML = "No node selected.";
       generatedXpathEl.value = "";
       return;
     }
-
-    let propertiesHtml = "<table>";
-    if (node.properties) {
-      for (const key in node.properties) {
-        propertiesHtml += `<tr><th>${escapeHtml(key)}</th><td>${escapeHtml(String(node.properties[key]))}</td></tr>`;
-      }
-    }
+    let html = "<table>";
+    if (node.properties)
+      for (const k in node.properties)
+        html += `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(String(node.properties[k]))}</td></tr>`;
     if (node.name)
-      propertiesHtml += `<tr><th>class (name)</th><td>${escapeHtml(node.name)}</td></tr>`;
+      html += `<tr><th>class</th><td>${escapeHtml(node.name)}</td></tr>`;
     if (node.rect)
-      propertiesHtml += `<tr><th>rect (abs)</th><td>x:${node.rect.x}, y:${node.rect.y}, w:${node.rect.width}, h:${node.rect.height}</td></tr>`;
-    if (node.bounds)
-      propertiesHtml += `<tr><th>bounds (rel)</th><td>${node.bounds.map((b) => (typeof b === "number" ? b.toFixed(4) : String(b))).join(", ")}</td></tr>`;
-    propertiesHtml += "</table>";
-    elementPropertiesViewEl.innerHTML = propertiesHtml;
+      html += `<tr><th>rect (device)</th><td>x:${node.rect.x}, y:${node.rect.y}, w:${node.rect.width}, h:${node.rect.height}</td></tr>`;
+    if (node.bounds && Array.isArray(node.bounds))
+      html += `<tr><th>bounds (relative)</th><td>${node.bounds.map((b) => (typeof b === "number" ? b.toFixed(4) : String(b))).join(", ")}</td></tr>`;
+    html += "</table>";
+    elementPropertiesViewEl.innerHTML = html;
     generatedXpathEl.value = generateBasicXPath(node);
   }
-
   function escapeHtml(unsafe) {
-    if (unsafe === null || unsafe === undefined) return "";
-    return unsafe
-      .toString()
+    /* ... (same) ... */ return String(unsafe)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
   }
-
   function generateBasicXPath(node) {
+    /* ... (same) ... */
     if (!node || !node.properties) return "";
-    const props = node.properties;
-    let xpath = "";
-    const className = escapeHtml(props["class"] || node.name || "*");
-
-    if (props["resource-id"]) {
-      xpath = `//*[@resource-id='${escapeHtml(props["resource-id"])}']`;
-    } else if (props["text"]) {
-      const escapedText = escapeHtml(props["text"]).replace(/'/g, "&apos;"); // Further escape for XPath string literal
-      xpath = `//${className}[@text='${escapedText}']`;
-    } else if (props["content-desc"]) {
-      const escapedDesc = escapeHtml(props["content-desc"]).replace(
-        /'/g,
-        "&apos;",
-      );
-      xpath = `//${className}[@content-desc='${escapedDesc}']`;
-    } else {
-      xpath = `//${className}`;
-    }
-    return xpath;
+    const p = node.properties;
+    const c = escapeHtml(p["class"] || node.name || "*");
+    if (p["resource-id"])
+      return `//*[@resource-id='${escapeHtml(p["resource-id"])}']`;
+    if (p["text"])
+      return `//${c}[@text='${escapeHtml(p["text"]).replace(/'/g, "&apos;")}']`;
+    if (p["content-desc"])
+      return `//${c}[@content-desc='${escapeHtml(p["content-desc"]).replace(/'/g, "&apos;")}']`;
+    return `//${c}`;
   }
 
-  function highlightElementOnScreen(node) {
-    // console.log("highlightElementOnScreen: CALLED for node path:", node ? node.key : "null node"); // Can be verbose
-    if (!highlightBox || !deviceScreenImg || !deviceScreenContainer) {
-      console.warn(
-        "highlightElementOnScreen: Highlight-related DOM elements not found.",
+  function findElementAtCanvasCoordinates(canvasX, canvasY) {
+    if (DEBUG_ELEMENT_FINDING)
+      console.log(
+        `findElementAtCanvasCoordinates: Entry (X:${canvasX.toFixed(1)}, Y:${canvasY.toFixed(1)}). currentHierarchyData is ${currentHierarchyData ? "PRESENT" : "NULL"}`,
       );
-      return;
+    if (!currentHierarchyData) {
+      if (DEBUG_ELEMENT_FINDING)
+        console.warn(
+          "findElementAtCanvasCoordinates: currentHierarchyData is null. Cannot find element.",
+        );
+      return null;
     }
     if (
-      !node ||
+      !overlayCanvas ||
+      overlayCanvas.width === 0 ||
+      overlayCanvas.height === 0
+    ) {
+      if (DEBUG_ELEMENT_FINDING)
+        console.warn(
+          "findElementAtCanvasCoordinates: overlayCanvas not ready.",
+        );
+      return null;
+    }
+    const relX = canvasX / overlayCanvas.width;
+    const relY = canvasY / overlayCanvas.height;
+    let hierarchyToSearch = currentHierarchyData;
+    if (hierarchyToSearch) {
+      if (
+        !hierarchyToSearch.bounds ||
+        !Array.isArray(hierarchyToSearch.bounds) ||
+        hierarchyToSearch.bounds.length !== 4 ||
+        hierarchyToSearch.bounds.some((b) => typeof b !== "number" || isNaN(b))
+      ) {
+        if (DEBUG_ELEMENT_FINDING)
+          console.warn(
+            `CanvasInteraction DBG: Root node for search ('${hierarchyToSearch.name || "Unnamed Root"}', Key: '${hierarchyToSearch.key || "Unknown Key"}') has missing/invalid/NaN bounds. Applying default [0.0, 0.0, 1.0, 1.0]. Original bounds:`,
+            hierarchyToSearch.bounds,
+          );
+        hierarchyToSearch = {
+          ...hierarchyToSearch,
+          bounds: [0.0, 0.0, 1.0, 1.0],
+        };
+      }
+    } else {
+      if (DEBUG_ELEMENT_FINDING)
+        console.error(
+          "Logic Error: hierarchyToSearch became null after currentHierarchyData check.",
+        );
+      return null;
+    }
+
+    const found = findElementAtRelativeCoordinates(
+      hierarchyToSearch,
+      relX,
+      relY,
+      "root",
+      0,
+    ); // Pass initial depth
+
+    if (DEBUG_ELEMENT_FINDING)
+      console.log(
+        `findElementAtCanvasCoordinates: Final result - ${found ? found.name + " (Key:" + found.key + ")" : "None"}`,
+      );
+    return found;
+  }
+
+  // Modified findElementAtRelativeCoordinates to potentially favor smaller, clickable elements
+  function findElementAtRelativeCoordinates(
+    node,
+    relX,
+    relY,
+    pathForDebug,
+    depth,
+  ) {
+    if (!node) return null;
+    if (
       !node.bounds ||
       !Array.isArray(node.bounds) ||
       node.bounds.length !== 4 ||
-      !deviceScreenImg.clientWidth ||
-      !actualDeviceWidth
+      node.bounds.some((b) => typeof b !== "number" || isNaN(b))
     ) {
-      hideHighlightBox();
-      return;
-    }
-
-    const [x1_rel, y1_rel, x2_rel, y2_rel] = node.bounds;
-    const imgRect = deviceScreenImg.getBoundingClientRect();
-    const containerRect = deviceScreenContainer.getBoundingClientRect();
-    const displayWidth = imgRect.width;
-    const displayHeight = imgRect.height;
-
-    const left = x1_rel * displayWidth + (imgRect.left - containerRect.left);
-    const top = y1_rel * displayHeight + (imgRect.top - containerRect.top);
-    const width = (x2_rel - x1_rel) * displayWidth;
-    const height = (y2_rel - y1_rel) * displayHeight;
-
-    highlightBox.style.left = `${left}px`;
-    highlightBox.style.top = `${top}px`;
-    highlightBox.style.width = `${width}px`;
-    highlightBox.style.height = `${height}px`;
-    highlightBox.style.display = "block";
-  }
-
-  function hideHighlightBox() {
-    if (highlightBox) highlightBox.style.display = "none";
-  }
-
-  if (deviceScreenImg) {
-    // Check if exists before adding listener
-    deviceScreenImg.addEventListener("click", handleScreenshotClick);
-  } else {
-    console.warn(
-      "Device screen image element not found, click listener not added.",
-    );
-  }
-
-  async function handleScreenshotClick(event) {
-    console.log("handleScreenshotClick: CALLED"); // Added log
-    if (
-      !currentHierarchyData ||
-      !currentDeviceSerial ||
-      !deviceScreenImg ||
-      !deviceScreenImg.clientWidth ||
-      !actualDeviceWidth
-    ) {
-      console.warn(
-        "Cannot handle screenshot click: missing hierarchy, device selection, image element, or screen dimensions.",
-      );
-      return;
-    }
-
-    const imgRect = deviceScreenImg.getBoundingClientRect();
-    const clickX_on_img = event.clientX - imgRect.left;
-    const clickY_on_img = event.clientY - imgRect.top;
-    const relativeX = clickX_on_img / deviceScreenImg.clientWidth;
-    const relativeY = clickY_on_img / deviceScreenImg.clientHeight;
-
-    console.log(
-      `Clicked on image at: (${clickX_on_img}, ${clickY_on_img}), Relative: (${relativeX.toFixed(4)}, ${relativeY.toFixed(4)})`,
-    );
-    const foundNode = findElementAtRelativeCoordinates(
-      currentHierarchyData,
-      relativeX,
-      relativeY,
-    );
-
-    if (foundNode) {
-      console.log(
-        "Found node by click:",
-        foundNode.name,
-        "Path:",
-        foundNode.key,
-      ); // Added log
-      selectedNodePath = foundNode.key;
-      displayNodeProperties(foundNode);
-      highlightElementOnScreen(foundNode);
-      if (currentHierarchyData) {
-        renderHierarchyTree(
-          currentHierarchyData,
-          hierarchyTreeViewEl,
-          currentHierarchyData.key,
-        );
-      }
-    } else {
-      console.log("No element found at clicked coordinates.");
-      hideHighlightBox();
-    }
-  }
-
-  function findElementAtRelativeCoordinates(node, relX, relY) {
-    if (
-      !node ||
-      !node.bounds ||
-      !Array.isArray(node.bounds) ||
-      node.bounds.length !== 4
-    )
+      // if (DEBUG_ELEMENT_FINDING && pathForDebug === "root") console.warn(`  Recursive Find: Path ${pathForDebug} - Node ${node.name || node.key || "Unknown"} has invalid/NaN bounds:`, node.bounds);
       return null;
-    const [x1, y1, x2, y2] = node.bounds;
-    let bestMatch = null;
+    }
 
-    if (relX >= x1 && relX <= x2 && relY >= y1 && relY <= y2) {
-      bestMatch = node;
+    const [x1, y1, x2, y2] = node.bounds;
+    const nodeWidth = x2 - x1;
+    const nodeHeight = y2 - y1;
+    if (nodeWidth <= 0 || nodeHeight <= 0) return null;
+
+    const isXWithin = relX >= x1 && relX <= x2;
+    const isYWithin = relY >= y1 && relY <= y2;
+
+    if (isXWithin && isYWithin) {
+      let bestMatch = node; // Current node is a candidate.
+
       if (node.children && node.children.length > 0) {
-        for (const child of node.children) {
-          const childMatch = findElementAtRelativeCoordinates(
-            child,
-            relX,
-            relY,
-          );
-          if (childMatch) {
-            bestMatch = childMatch;
-            // Keep searching in case multiple children overlap; the deepest one that still contains the point is preferred.
-            // For true smallest area, you'd compare areas if multiple children match.
-            // For now, deepest takes precedence.
+        for (let i = 0; i < node.children.length; i++) {
+          const child = node.children[i];
+          if (child && typeof child === "object") {
+            const childCandidate = findElementAtRelativeCoordinates(
+              child,
+              relX,
+              relY,
+              pathForDebug + "/" + i,
+              depth + 1,
+            );
+            if (childCandidate) {
+              // Heuristic to prefer a more specific (often smaller, clickable) child
+              if (
+                bestMatch === node || // current bestMatch is the parent itself
+                (childCandidate.properties?.clickable === "true" &&
+                  bestMatch.properties?.clickable !== "true") || // child is clickable, parent isn't
+                ((childCandidate.bounds[2] - childCandidate.bounds[0]) *
+                  (childCandidate.bounds[3] - childCandidate.bounds[1]) <
+                  (bestMatch.bounds[2] - bestMatch.bounds[0]) *
+                    (bestMatch.bounds[3] - bestMatch.bounds[1]) &&
+                  !(bestMatch.properties?.clickable === "true")) // child is smaller and current best isn't clickable
+              ) {
+                // If the child is significantly smaller, or more interactive, it's often a better target than a large container parent.
+                // This helps "pierce" through large containers if a more specific child is found.
+                // However, we still need to ensure the deepest specific match is found.
+                // The recursive nature should handle "deepest". This logic is more about "better" at the same effective visual layer.
+
+                // The current recursive approach for `bestMatch` is "deepest wins". Let's keep that for now
+                // and address the "greedy overlay" by a different filter if needed or by enhancing this heuristic.
+                // For now, simple deepest wins:
+                bestMatch = childCandidate;
+              }
+            }
           }
         }
       }
+      return bestMatch; // This will be the deepest node that geometrically matches.
     }
-    return bestMatch; // This will return the deepest matching node.
+    return null;
+  }
+
+  if (overlayCanvas) {
+    overlayCanvas.addEventListener("mousemove", function (event) {
+      if (!currentHierarchyData || !overlayCtx || isHierarchyLoading) return;
+      const rect = overlayCanvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const nodeUnderMouse = findElementAtCanvasCoordinates(x, y);
+      if (hoveredNode?.key !== nodeUnderMouse?.key) {
+        // if (DEBUG_ELEMENT_FINDING && nodeUnderMouse) console.log("MOUSEMOVE: Hover changed to ->", nodeUnderMouse.name, nodeUnderMouse.key);
+        // else if (DEBUG_ELEMENT_FINDING && !nodeUnderMouse && hoveredNode) console.log("MOUSEMOVE: Hover ended from", hoveredNode.name, hoveredNode.key);
+        hoveredNode = nodeUnderMouse;
+        drawNodeOverlays();
+        if (hoveredNode) {
+          displayNodeProperties(hoveredNode);
+          updateAndShowTooltip(hoveredNode, event.pageX, event.pageY);
+        } else {
+          hideTooltip();
+          if (selectedNode) displayNodeProperties(selectedNode);
+          else if (elementPropertiesViewEl)
+            elementPropertiesViewEl.innerHTML = "Hover or select an element.";
+        }
+      } else if (hoveredNode && nodeUnderMouse) {
+        updateAndShowTooltip(hoveredNode, event.pageX, event.pageY);
+      }
+    });
+    overlayCanvas.addEventListener("mouseleave", function () {
+      hideTooltip();
+      if (hoveredNode) {
+        hoveredNode = null;
+        drawNodeOverlays();
+        if (selectedNode) displayNodeProperties(selectedNode);
+        else if (elementPropertiesViewEl)
+          elementPropertiesViewEl.innerHTML = "Select an element.";
+      }
+    });
+    overlayCanvas.addEventListener("click", function (event) {
+      if (isHierarchyLoading || !currentHierarchyData) {
+        console.warn(
+          "CLICK_HANDLER: Click ignored, hierarchy not loaded or is loading.",
+        );
+        if (messageArea)
+          messageArea.textContent =
+            "Hierarchy is loading or not available. Please wait or refresh.";
+        return;
+      }
+      const rect = overlayCanvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      if (DEBUG_ELEMENT_FINDING)
+        console.log(
+          "CLICK_HANDLER: Click event triggered at canvas coords:",
+          x.toFixed(1),
+          y.toFixed(1),
+        );
+      const clickedNode = findElementAtCanvasCoordinates(x, y);
+      console.log(
+        `CLICK_HANDLER: Node found by findElementAtCanvasCoordinates: ${clickedNode ? clickedNode.name + " (Key:" + clickedNode.key + ")" : "None"}`,
+      );
+      if (clickedNode) {
+        selectedNode = clickedNode;
+        selectedNodePath = clickedNode.key;
+        if (DEBUG_ELEMENT_FINDING)
+          console.log(
+            `CLICK_HANDLER: Set selectedNode to ${selectedNode.name} (Key: ${selectedNodePath})`,
+          );
+        drawNodeOverlays();
+        displayNodeProperties(selectedNode);
+        updateAndShowTooltip(selectedNode, event.pageX, event.pageY);
+        if (generatedXpathEl)
+          generatedXpathEl.value = generateBasicXPath(selectedNode);
+        const RTreeElOld =
+          hierarchyTreeViewEl.querySelector("li.selected-node");
+        if (RTreeElOld) RTreeElOld.classList.remove("selected-node");
+        const RTreeElNew = hierarchyTreeViewEl.querySelector(
+          `li[data-node-path="${selectedNodePath}"]`,
+        );
+        if (RTreeElNew) {
+          RTreeElNew.classList.add("selected-node");
+          if (DEBUG_ELEMENT_FINDING)
+            console.log(
+              "CLICK_HANDLER: Highlighted in hierarchy tree for path:",
+              selectedNodePath,
+            );
+        } else {
+          if (DEBUG_ELEMENT_FINDING)
+            console.warn(
+              "CLICK_HANDLER: Could not find <li> in hierarchy tree for path:",
+              selectedNodePath,
+            );
+        }
+      } else {
+        selectedNode = null;
+        selectedNodePath = null;
+        hideTooltip();
+        if (elementPropertiesViewEl)
+          elementPropertiesViewEl.innerHTML = "No element selected.";
+        if (generatedXpathEl) generatedXpathEl.value = "";
+        drawNodeOverlays();
+        const RTreeEl = hierarchyTreeViewEl.querySelector("li.selected-node");
+        if (RTreeEl) RTreeEl.classList.remove("selected-node");
+        if (DEBUG_ELEMENT_FINDING)
+          console.log(
+            "CLICK_HANDLER: Clicked on empty space, selection cleared.",
+          );
+      }
+    });
   }
 
   async function handleRunPythonCode() {
-    console.log("handleRunPythonCode: CALLED"); // Added log
-    if (!currentDeviceSerial) {
-      alert("Please select a device first.");
-      return;
-    }
-    if (!pythonEditor || !pythonOutput) {
-      console.error("Python editor or output element not found!");
-      return;
-    }
+    /* ... (same) ... */
+    if (!currentDeviceSerial || !pythonEditor || !pythonOutput) return;
     const code = pythonEditor.value;
     if (!code.trim()) {
-      alert("Please enter some Python code to execute.");
+      alert("Enter Python code.");
       return;
     }
-    pythonOutput.textContent = "Executing Python code...";
-    const payload = { code: code, enable_tracing: true }; // enable_tracing might not be used by backend
+    pythonOutput.textContent = "Executing...";
     try {
-      const outputText = await callBackend(
+      const output = await callBackend(
         "POST",
         `/api/android/${currentDeviceSerial}/interactive_python`,
-        payload,
+        { code },
       );
-      pythonOutput.textContent =
-        typeof outputText === "string"
-          ? outputText
-          : JSON.stringify(outputText); // Ensure it's a string
-    } catch (error) {
-      pythonOutput.textContent = `Execution Error:\n${error.message}`;
+      pythonOutput.textContent = String(output);
+    } catch (e) {
+      pythonOutput.textContent = `Error: ${e.message}`;
     }
   }
-
   async function sendDeviceCommand(commandName) {
-    console.log(
-      "sendDeviceCommand: CALLED for command:",
-      commandName,
-      "on serial:",
-      currentDeviceSerial,
-    ); // Added log
+    /* ... (same) ... */
     if (!currentDeviceSerial) {
-      alert("Please select a device first.");
+      alert("Select device.");
       return;
     }
-    if (messageArea)
-      messageArea.textContent = `Sending command: ${commandName}...`;
+    if (messageArea) messageArea.textContent = `Sending: ${commandName}...`;
     try {
-      const responseData = await callBackend(
+      await callBackend(
         "POST",
         `/api/android/${currentDeviceSerial}/command/${commandName}`,
         {},
       );
-      console.log("sendDeviceCommand: Response from command:", responseData); // Added log
       if (messageArea)
-        messageArea.textContent = `Command '${commandName}' sent successfully.`;
-      if (["home", "back"].includes(commandName)) {
-        setTimeout(fetchAndDisplayScreenshot, 300); // Give time for UI to update
-      }
-    } catch (error) {
-      if (messageArea)
-        messageArea.textContent = `Error sending command '${commandName}': ${error.message}`;
+        messageArea.textContent = `Command '${commandName}' sent.`;
+      if (["home", "back"].includes(commandName))
+        setTimeout(fetchAndDisplayScreenshot, 300);
+    } catch (e) {
+      if (messageArea) messageArea.textContent = `Error: ${e.message}`;
     }
   }
 
   function initialize() {
-    console.log("initialize: CALLED"); // Added log
-    if (messageArea) {
+    /* ... (same, with button consts local if not already) ... */
+    if (messageArea)
       messageArea.innerHTML =
-        "<span style='color: blue;'>Initializing Local App Inspector...</span>";
-    } else {
-      console.warn(
-        "initialize: messageArea not found, cannot set initializing message.",
+        "<span style='color: blue;'>Initializing...</span>";
+    createCanvasTooltip();
+    if (deviceSelect) loadDeviceList();
+    else if (messageArea)
+      messageArea.innerHTML =
+        "<span style='color: red;'>UI Error: device-select missing.</span>";
+    window.addEventListener("resize", setupOverlayCanvas);
+    if (deviceScreenImg) {
+      if (!deviceScreenImg.onloadAttachedToInspector) {
+        deviceScreenImg.addEventListener("load", setupOverlayCanvas);
+        deviceScreenImg.onloadAttachedToInspector = true;
+      }
+    } else console.warn("Init: deviceScreenImg not found");
+    const localRefreshScreenBtn = document.getElementById("refresh-screen-btn"); // Ensure using local consts
+    if (localRefreshScreenBtn)
+      localRefreshScreenBtn.addEventListener(
+        "click",
+        fetchAndDisplayScreenshot,
       );
-    }
-
-    // Only call loadDeviceList if deviceSelect element actually exists
-    if (deviceSelect) {
-      loadDeviceList();
-    } else {
-      console.error(
-        "initialize: deviceSelect element not found. Device list will not be loaded.",
-      );
-      if (messageArea)
-        messageArea.innerHTML =
-          "<span style='color: red;'>Error: UI component 'device-select' missing.</span>";
-      return; // Stop initialization if critical component is missing
-    }
-
-    // Add event listeners only if the elements exist
     if (deviceSelect)
       deviceSelect.addEventListener("change", handleDeviceSelectionChange);
-    else
-      console.warn(
-        "initialize: deviceSelect not found, 'change' listener not added.",
+    const localRunPythonBtn = document.getElementById("run-python-button");
+    if (localRunPythonBtn)
+      localRunPythonBtn.addEventListener("click", handleRunPythonCode);
+    const localDeviceHomeBtn = document.getElementById("device-home-btn");
+    if (localDeviceHomeBtn)
+      localDeviceHomeBtn.addEventListener("click", () =>
+        sendDeviceCommand("home"),
       );
-
-    if (refreshScreenBtn)
-      refreshScreenBtn.addEventListener("click", fetchAndDisplayScreenshot);
-    else
-      console.warn(
-        "initialize: refreshScreenBtn not found, listener not added.",
+    const localDeviceBackBtn = document.getElementById("device-back-btn");
+    if (localDeviceBackBtn)
+      localDeviceBackBtn.addEventListener("click", () =>
+        sendDeviceCommand("back"),
       );
-
-    if (runPythonBtn)
-      runPythonBtn.addEventListener("click", handleRunPythonCode);
-    else
-      console.warn("initialize: runPythonBtn not found, listener not added.");
-
-    if (deviceHomeBtn)
-      deviceHomeBtn.addEventListener("click", () => sendDeviceCommand("home"));
-    else
-      console.warn("initialize: deviceHomeBtn not found, listener not added.");
-
-    if (deviceBackBtn)
-      deviceBackBtn.addEventListener("click", () => sendDeviceCommand("back"));
-    else
-      console.warn("initialize: deviceBackBtn not found, listener not added.");
-
-    if (refreshHierarchyBtn)
-      refreshHierarchyBtn.addEventListener("click", fetchAndRenderHierarchy);
-    else
-      console.warn(
-        "initialize: refreshHierarchyBtn not found, listener not added.",
+    const localRefreshHierarchyBtn = document.getElementById(
+      "refresh-hierarchy-btn",
+    );
+    if (localRefreshHierarchyBtn)
+      localRefreshHierarchyBtn.addEventListener(
+        "click",
+        fetchAndRenderHierarchy,
       );
-
-    console.log("initialize: Event listeners setup (if elements found).");
   }
 
-  // Ensure openTab is globally available if demo.html still relies on it directly.
-  // It's better if demo.html's inline script calls a function defined within this main IIFE if possible,
-  // or this script sets up tab listeners directly.
-  window.openTab = function (evt, tabName) {
-    console.log("openTab: CALLED for tabName:", tabName); // Added log
-    var i, tabcontent, tabbuttons;
-    tabcontent = document.getElementsByClassName("tab-content");
-    for (i = 0; i < tabcontent.length; i++) {
-      tabcontent[i].style.display = "none";
-      tabcontent[i].classList.remove("active");
-    }
-    tabbuttons = document.getElementsByClassName("tab-button");
-    for (i = 0; i < tabbuttons.length; i++) {
-      tabbuttons[i].classList.remove("active");
-    }
-    const activeTabContent = document.getElementById(tabName);
-    if (activeTabContent) {
-      activeTabContent.style.display = "flex";
-      activeTabContent.classList.add("active");
-    } else {
-      console.warn("openTab: Could not find tab content for ID:", tabName);
-    }
-
-    if (evt && evt.currentTarget) {
-      evt.currentTarget.classList.add("active");
-    } else {
-      for (i = 0; i < tabbuttons.length; i++) {
-        const onclickAttr = tabbuttons[i].getAttribute("onclick");
-        // Be careful with string matching for onclick if it becomes more complex
-        if (
-          onclickAttr &&
-          (onclickAttr.includes("'" + tabName + "'") ||
-            onclickAttr.includes('"' + tabName + '"'))
-        ) {
-          tabbuttons[i].classList.add("active");
-          break;
+  if (typeof window.openTab !== "function") {
+    /* ... (same openTab definition) ... */
+    window.openTab = function (evt, tabName) {
+      let i, tc, tb;
+      tc = document.getElementsByClassName("tab-content");
+      for (i = 0; i < tc.length; i++) {
+        tc[i].style.display = "none";
+        tc[i].classList.remove("active");
+      }
+      tb = document.getElementsByClassName("tab-button");
+      for (i = 0; i < tb.length; i++) {
+        tb[i].classList.remove("active");
+      }
+      const actTab = document.getElementById(tabName);
+      if (actTab) {
+        actTab.style.display = "flex";
+        actTab.classList.add("active");
+      }
+      if (evt && evt.currentTarget) {
+        evt.currentTarget.classList.add("active");
+      } else {
+        for (i = 0; i < tb.length; i++) {
+          const onC = tb[i].getAttribute("onclick");
+          if (
+            onC &&
+            (onC.includes("'" + tabName + "'") ||
+              onC.includes('"' + tabName + '"'))
+          ) {
+            tb[i].classList.add("active");
+            break;
+          }
         }
       }
-    }
+      if (
+        tabName === "inspector-tab" &&
+        !currentHierarchyData &&
+        !isHierarchyLoading &&
+        currentDeviceSerial
+      ) {
+        if (DEBUG_ELEMENT_FINDING)
+          console.log("Inspector tab opened/focused, fetching hierarchy...");
+        fetchAndRenderHierarchy();
+      }
+    };
+  }
 
-    if (
-      tabName === "inspector-tab" &&
-      !currentHierarchyData &&
-      currentDeviceSerial
-    ) {
-      console.log("openTab: Inspector tab opened, fetching hierarchy.");
-      fetchAndRenderHierarchy();
-    }
-  };
-
-  console.log("DOMContentLoaded: Initializing default tab.");
-  const defaultTab = "interactive-python-tab";
+  const defaultTabNameFromHTML = document.querySelector(".tab-button.active")
+    ? document
+        .querySelector(".tab-button.active")
+        .getAttribute("onclick")
+        ?.match(/openTab\(event, ['"]([^'"]+)['"]\)/)?.[1]
+    : null;
+  const defaultTabToOpen = defaultTabNameFromHTML || "interactive-python-tab";
   const defaultTabButton = Array.from(
     document.querySelectorAll(".tab-button"),
-  ).find((btn) => {
-    const onclickAttr = btn.getAttribute("onclick");
+  ).find((b) => {
+    const o = b.getAttribute("onclick");
     return (
-      onclickAttr &&
-      (onclickAttr.includes("'" + defaultTab + "'") ||
-        onclickAttr.includes('"' + defaultTab + '"'))
+      o &&
+      (o.includes("'" + defaultTabToOpen + "'") ||
+        o.includes('"' + defaultTabToOpen + '"'))
     );
   });
-
-  if (defaultTabButton) {
-    console.log(
-      "DOMContentLoaded: Found default tab button, opening tab:",
-      defaultTab,
-    );
-    openTab({ currentTarget: defaultTabButton }, defaultTab);
-  } else {
-    // Fallback if button not found by onclick attribute (e.g. if event listeners are used instead)
-    // or manually activate first tab if any
+  if (defaultTabButton && window.openTab) {
+    window.openTab({ currentTarget: defaultTabButton }, defaultTabToOpen);
+  } else if (window.openTab) {
     const firstTabButton = document.querySelector(".tab-button");
     if (firstTabButton) {
-      console.warn(
-        `DOMContentLoaded: Default tab button for '${defaultTab}' not found by onclick, trying first tab button:`,
-        firstTabButton,
-      );
-      const firstTabName = firstTabButton
-        .getAttribute("onclick")
-        .match(/openTab\(event, ['"](.*?)['"]\)/);
-      if (firstTabName && firstTabName[1]) {
-        openTab({ currentTarget: firstTabButton }, firstTabName[1]);
-      } else {
-        console.error(
-          "DOMContentLoaded: Could not determine tab name from first tab button's onclick.",
-        );
-      }
-    } else {
-      console.error(
-        "DOMContentLoaded: No tab buttons found to set a default active tab.",
-      );
+      const onclickAttr = firstTabButton.getAttribute("onclick");
+      const match = onclickAttr
+        ? onclickAttr.match(/openTab\(event, ['"]([^'"]+)['"]\)/)
+        : null;
+      if (match && match[1])
+        window.openTab({ currentTarget: firstTabButton }, match[1]);
     }
   }
 
-  initialize(); // Call main initialization logic
-  console.log("DOMContentLoaded: Script execution FINISHED."); // Added: Log end of script
+  initialize();
 });
