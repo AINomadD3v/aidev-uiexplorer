@@ -1,15 +1,12 @@
-# uiautodev/utils/interactive_executor.py
-# coding: utf-8
-
 import contextlib
 import io
-import json  # Still useful for sending structured data back, but not for print()
+import json
 import linecache
 import os
 import sys
 import time
 import traceback
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 # This will be provided by the uiautodev environment
 import uiautomator2 as u2
@@ -75,12 +72,6 @@ def redirect_stdstreams_to_capture(stdout_buf: io.StringIO, stderr_buf: io.Strin
     finally:
         sys.stdout = original_stdout
         sys.stderr = original_stderr
-
-
-# Tracing related functions (getline_for_trace, generate_trace_function)
-# can remain as they are if tracing is ever re-enabled for debugging,
-# but their output should be directed to a separate field in the structured response.
-# For now, as we default tracing to False, they won't be actively used for primary output.
 
 
 def getline_for_trace(filename: str, lineno: int) -> str:

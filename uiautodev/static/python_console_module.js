@@ -1,5 +1,4 @@
 // static/python_console_module.js
-// Manages the CodeMirror 5 instance for the Python console (Completions Disabled)
 
 (function (global) {
   "use strict";

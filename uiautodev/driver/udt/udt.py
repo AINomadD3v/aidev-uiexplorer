@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""Created on Sun Apr 21 2024 21:15:15 by codeskyblue
-"""
-
-
 import atexit
 import enum
 import io
@@ -14,7 +7,6 @@ import threading
 import time
 from base64 import b64decode
 from pathlib import Path
-from pprint import pprint
 from typing import Any, Optional
 
 import adbutils
@@ -27,18 +19,13 @@ shell steps:
 adb push appium-uiautomator2-v5.12.4.apk /data/local/tmp/udt.jar
 adb shell CLASSPATH=/data/local/tmp/udt.jar app_process / "com.wetest.uia2.Main"
 adb forward tcp:6790 tcp:6790
-# 创建session
 echo '{"capabilities": {}}' | http POST :6790/session
-# 获取当前所有session
 http GET :6790/sessions
-# 获取pageSource
 http GET :6790/session/{session_id}/source
-
-# TODO
-# /appium/settins 中waitForIdleTimeout需要调整，其他的再看看
 """
 
 logger = logging.getLogger(__name__)
+
 
 class UDTError(Exception):
     pass
@@ -49,7 +36,7 @@ class HTTPError(UDTError):
 
 
 class AppiumErrorEnum(str, enum.Enum):
-    InvalidSessionID = 'invalid session id'
+    InvalidSessionID = "invalid session id"
 
 
 class AppiumError(UDTError):
@@ -73,14 +60,14 @@ class MockAdbProcess:
     def __init__(self, conn: adbutils.AdbConnection) -> None:
         self._conn = conn
         self._event = threading.Event()
-        
+
         def wait_finished():
             try:
                 self._conn.read_until_close()
             except:
                 pass
             self._event.set()
-        
+
         t = threading.Thread(target=wait_finished)
         t.daemon = True
         t.name = "wait_adb_conn"
@@ -113,18 +100,24 @@ class UDT:
             return self._session_id
         self._session_id = self._new_session()
         logger.debug("update waitForIdleTimeout to 0ms")
-        self._dev_request("POST", f"/session/{self._session_id}/appium/settings", payload={
-            "settings": {
-                "waitForIdleTimeout": 10,
-                "waitForSelectorTimeout": 10,
-                "actionAcknowledgmentTimeout": 10,
-                "scrollAcknowledgmentTimeout": 10,
-                "trackScrollEvents": False,
-            }
-        })
-        result = self._dev_request("GET", f"/session/{self._session_id}/appium/settings")
+        self._dev_request(
+            "POST",
+            f"/session/{self._session_id}/appium/settings",
+            payload={
+                "settings": {
+                    "waitForIdleTimeout": 10,
+                    "waitForSelectorTimeout": 10,
+                    "actionAcknowledgmentTimeout": 10,
+                    "scrollAcknowledgmentTimeout": 10,
+                    "trackScrollEvents": False,
+                }
+            },
+        )
+        result = self._dev_request(
+            "GET", f"/session/{self._session_id}/appium/settings"
+        )
         return self._session_id
-    
+
     def dev_request(self, method: str, path: str, **kwargs) -> AppiumResponse:
         """send http request to device
         :param method: GET, POST, DELETE, PUT
@@ -135,7 +128,7 @@ class UDT:
         try:
             if path.startswith("@"):
                 path = path[1:]
-                kwargs['with_session'] = True
+                kwargs["with_session"] = True
             return self._dev_request(method, path, **kwargs)
         except HTTPError:
             self.launch_server()
@@ -146,7 +139,14 @@ class UDT:
                 return self._dev_request(method, path, **kwargs)
             raise
 
-    def _dev_request(self, method: str, path: str, payload=None, timeout: float = 10.0, with_session: bool = False) -> AppiumResponse:
+    def _dev_request(
+        self,
+        method: str,
+        path: str,
+        payload=None,
+        timeout: float = 10.0,
+        with_session: bool = False,
+    ) -> AppiumResponse:
         try:
             if with_session:
                 sid = self.get_session_id()
@@ -165,13 +165,13 @@ class UDT:
             raise HTTPError(f"{method} to {path!r} error", payload)
         except json.JSONDecodeError as e:
             raise HTTPError("JSON decode error", e.msg)
-        
+
     def _new_session(self) -> str:
         resp = self._dev_request("POST", "/session", payload={"capabilities": {}})
         value = resp.value
-        if not isinstance(value, dict) and 'sessionId' not in value:
+        if not isinstance(value, dict) and "sessionId" not in value:
             raise UDTError("session create failed", resp)
-        sid = value['sessionId']
+        sid = value["sessionId"]
         if not sid:
             raise UDTError("session create failed", resp)
         return sid
@@ -179,7 +179,10 @@ class UDT:
     def post(self, path: str, payload=None) -> AppiumResponse:
         return self.dev_request("POST", path, payload=payload)
 
-    def get(self, path: str, ) -> AppiumResponse:
+    def get(
+        self,
+        path: str,
+    ) -> AppiumResponse:
         return self.dev_request("GET", path)
 
     def _update_process_status(self):
@@ -211,18 +214,27 @@ class UDT:
                 logger.debug("Process already running")
                 return
             logger.debug("Launching process")
-            dex_local_path = Path(__file__).parent.joinpath("appium-uiautomator2-v5.12.4-light.apk")
+            dex_local_path = Path(__file__).parent.joinpath(
+                "appium-uiautomator2-v5.12.4-light.apk"
+            )
             logger.debug("dex_local_path: %s", dex_local_path)
             dex_remote_path = "/data/local/tmp/udt/udt-5.12.4-light.dex"
             info = self._device.sync.stat(dex_remote_path)
             if info.size == dex_local_path.stat().st_size:
                 logger.debug("%s already exists", dex_remote_path)
             else:
-                logger.debug("push dex(%d) to %s", dex_local_path.stat().st_size, dex_remote_path)
+                logger.debug(
+                    "push dex(%d) to %s", dex_local_path.stat().st_size, dex_remote_path
+                )
                 self._device.shell("mkdir -p /data/local/tmp/udt")
                 self._device.sync.push(dex_local_path, dex_remote_path, 0o644)
-            logger.debug("CLASSPATH=%s app_process / com.wetest.uia2.Main", dex_remote_path)
-            conn = self._device.shell(f"CLASSPATH={dex_remote_path} app_process / com.wetest.uia2.Main", stream=True)
+            logger.debug(
+                "CLASSPATH=%s app_process / com.wetest.uia2.Main", dex_remote_path
+            )
+            conn = self._device.shell(
+                f"CLASSPATH={dex_remote_path} app_process / com.wetest.uia2.Main",
+                stream=True,
+            )
             self._process = MockAdbProcess(conn)
 
             self._lport = self._device.forward_port(6790)
@@ -241,18 +253,17 @@ class UDT:
     def dump_hierarchy(self) -> str:
         resp = self.get(f"@/source")
         return resp.value
-    
+
     def status(self):
         return self.get("/status")
-    
+
     def screenshot(self) -> Image.Image:
         resp = self.get(f"@/screenshot")
         raw = b64decode(resp.value)
         return Image.open(io.BytesIO(raw))
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     r = UDT(adbutils.device())
     print(r.status())

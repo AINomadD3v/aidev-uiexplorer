@@ -1,18 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""Created on Tue Mar 19 2024 10:19:27 by codeskyblue"""
-
-
-# Request and Response
 import enum
 from typing import List, Optional, Union
 
 from pydantic import BaseModel
 
-from uiautodev.model import (
-    Node,
-)  # Assuming Node model is defined elsewhere and correctly imported
+from uiautodev.model import Node
 
 
 # POST /api/v1/device/{serial}/command/{command}
@@ -105,9 +96,6 @@ class FindElementResponse(BaseModel):
     value: List[Node]
 
 
-# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# +++ ADDED: New Pydantic Model for Interactive Python Execution +++++++++++
-# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 class InteractiveCodePayload(BaseModel):
     """
     Payload for sending Python code to be executed interactively.
@@ -117,9 +105,3 @@ class InteractiveCodePayload(BaseModel):
     enable_tracing: bool = (
         True  # Optional: allows the client to control if LNO/DBG lines are generated
     )
-
-
-# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# +++ End of New Model +++++++++++++++++++++++++++++++++++++++++++++++++++++
-# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-

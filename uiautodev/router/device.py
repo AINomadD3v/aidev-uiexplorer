@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""Created on Fri Mar 01 2024 14:00:10 by codeskyblue"""
-
 import asyncio
 import io
 import logging
@@ -32,12 +27,6 @@ logger = logging.getLogger(__name__)
 
 class AndroidShellPayload(BaseModel):
     command: str
-
-
-# Assuming InteractiveCodePayload is defined in command_types.py
-# class InteractiveCodePayload(BaseModel):
-#     code: str
-#     enable_tracing: bool = False
 
 
 def make_router(provider: BaseProvider) -> APIRouter:

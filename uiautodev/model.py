@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""Created on Sun Feb 18 2024 11:12:33 by codeskyblue
-"""
 from __future__ import annotations
 
 import typing
@@ -33,7 +28,7 @@ class Rect(BaseModel):
 
 class Node(BaseModel):
     key: str
-    name: str # can be seen as description
+    name: str  # can be seen as description
     bounds: Optional[Tuple[float, float, float, float]] = None
     rect: Optional[Rect] = None
     properties: Dict[str, Union[str, bool]] = {}
@@ -51,3 +46,4 @@ class WindowSize(typing.NamedTuple):
 
 class AppInfo(BaseModel):
     packageName: str
+

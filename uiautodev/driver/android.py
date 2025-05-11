@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""Created on Fri Mar 01 2024 14:19:29 by codeskyblue
-"""
-
 import logging
 import re
 import time
@@ -17,11 +11,11 @@ from PIL import Image
 
 from uiautodev.command_types import CurrentAppResponse
 from uiautodev.driver.base_driver import BaseDriver
-from uiautodev.exceptions import AndroidDriverException, RequestError
+from uiautodev.exceptions import AndroidDriverException
 from uiautodev.model import AppInfo, Node, Rect, ShellResponse, WindowSize
-from uiautodev.utils.common import fetch_through_socket
 
 logger = logging.getLogger(__name__)
+
 
 class AndroidDriver(BaseDriver):
     def __init__(self, serial: str):
@@ -31,10 +25,12 @@ class AndroidDriver(BaseDriver):
     @cached_property
     def ud(self) -> u2.Device:
         return u2.connect_usb(self.serial)
-    
+
     def screenshot(self, id: int) -> Image.Image:
         if id > 0:
-            raise AndroidDriverException("multi-display is not supported yet for uiautomator2")
+            raise AndroidDriverException(
+                "multi-display is not supported yet for uiautomator2"
+            )
         return self.ud.screenshot()
 
     def shell(self, command: str) -> ShellResponse:
@@ -73,7 +69,7 @@ class AndroidDriver(BaseDriver):
         except Exception as e:
             logger.exception("unexpected dump error: %s", e)
             raise AndroidDriverException("Failed to dump hierarchy")
-    
+
     def tap(self, x: int, y: int):
         self.adb_device.click(x, y)
 
@@ -94,34 +90,34 @@ class AndroidDriver(BaseDriver):
         if self.adb_device.package_info(package) is None:
             raise AndroidDriverException(f"App not installed: {package}")
         self.adb_device.app_start(package)
-    
+
     def app_terminate(self, package: str):
         self.adb_device.app_stop(package)
 
     def home(self):
         self.adb_device.keyevent("HOME")
-    
+
     def wake_up(self):
         self.adb_device.keyevent("WAKEUP")
-    
+
     def back(self):
         self.adb_device.keyevent("BACK")
-    
+
     def app_switch(self):
         self.adb_device.keyevent("APP_SWITCH")
-    
+
     def volume_up(self):
         self.adb_device.keyevent("VOLUME_UP")
-    
+
     def volume_down(self):
         self.adb_device.keyevent("VOLUME_DOWN")
-    
+
     def volume_mute(self):
         self.adb_device.keyevent("VOLUME_MUTE")
-    
+
     def app_list(self) -> List[AppInfo]:
         results = []
-        output = self.adb_device.shell(["pm", "list", "packages", '-3'])
+        output = self.adb_device.shell(["pm", "list", "packages", "-3"])
         for m in re.finditer(r"^package:([^\s]+)\r?$", output, re.M):
             packageName = m.group(1)
             results.append(AppInfo(packageName=packageName))
@@ -131,12 +127,13 @@ class AndroidDriver(BaseDriver):
         line = self.adb_device.shell(f"pm path {package}")
         if not line.startswith("package:"):
             raise AndroidDriverException(f"Failed to get package path: {line}")
-        remote_path = line.split(':', 1)[1]
+        remote_path = line.split(":", 1)[1]
         yield from self.adb_device.sync.iter_content(remote_path)
 
 
-
-def parse_xml(xml_data: str, wsize: WindowSize, display_id: Optional[int] = None) -> Node:
+def parse_xml(
+    xml_data: str, wsize: WindowSize, display_id: Optional[int] = None
+) -> Node:
     root = ElementTree.fromstring(xml_data)
     node = parse_xml_element(root, wsize, display_id)
     if node is None:
@@ -144,7 +141,9 @@ def parse_xml(xml_data: str, wsize: WindowSize, display_id: Optional[int] = None
     return node
 
 
-def parse_xml_element(element, wsize: WindowSize, display_id: Optional[int], indexes: List[int] = [0]) -> Optional[Node]:
+def parse_xml_element(
+    element, wsize: WindowSize, display_id: Optional[int], indexes: List[int] = [0]
+) -> Optional[Node]:
     """
     Recursively parse an XML element into a dictionary format.
     """
@@ -163,7 +162,12 @@ def parse_xml_element(element, wsize: WindowSize, display_id: Optional[int], ind
         bounds = element.attrib["bounds"]
         bounds = list(map(int, re.findall(r"\d+", bounds)))
         assert len(bounds) == 4
-        rect = Rect(x=bounds[0], y=bounds[1], width=bounds[2] - bounds[0], height=bounds[3] - bounds[1])
+        rect = Rect(
+            x=bounds[0],
+            y=bounds[1],
+            width=bounds[2] - bounds[0],
+            height=bounds[3] - bounds[1],
+        )
         bounds = (
             bounds[0] / wsize.width,
             bounds[1] / wsize.height,
@@ -171,7 +175,7 @@ def parse_xml_element(element, wsize: WindowSize, display_id: Optional[int], ind
             bounds[3] / wsize.height,
         )
         bounds = map(partial(round, ndigits=4), bounds)
-        
+
     elem = Node(
         key="-".join(map(str, indexes)),
         name=name,

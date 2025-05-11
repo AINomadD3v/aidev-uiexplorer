@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""Created on Tue Mar 19 2024 10:43:51 by codeskyblue
-"""
-
 from __future__ import annotations
 
 import time
@@ -12,9 +6,20 @@ from typing import Callable, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
-from uiautodev.command_types import AppLaunchRequest, AppTerminateRequest, By, Command, CurrentAppResponse, \
-    DumpResponse, FindElementRequest, FindElementResponse, InstallAppRequest, InstallAppResponse, TapRequest, \
-    WindowSizeResponse
+from uiautodev.command_types import (
+    AppLaunchRequest,
+    AppTerminateRequest,
+    By,
+    Command,
+    CurrentAppResponse,
+    DumpResponse,
+    FindElementRequest,
+    FindElementResponse,
+    InstallAppRequest,
+    InstallAppResponse,
+    TapRequest,
+    WindowSizeResponse,
+)
 from uiautodev.driver.base_driver import BaseDriver
 from uiautodev.exceptions import ElementNotFoundError
 from uiautodev.model import AppInfo, Node
@@ -60,8 +65,7 @@ def send_command(driver: BaseDriver, command: Union[str, Command], params=None):
 
 @register(Command.TAP)
 def tap(driver: BaseDriver, params: TapRequest):
-    """Tap on the screen
-    """
+    """Tap on the screen"""
     x = params.x
     y = params.y
     if params.isPercent:
@@ -154,7 +158,9 @@ def node_match(node: Node, by: By, value: str) -> bool:
 
 
 @register(Command.FIND_ELEMENTS)
-def find_elements(driver: BaseDriver, params: FindElementRequest) -> FindElementResponse:
+def find_elements(
+    driver: BaseDriver, params: FindElementRequest
+) -> FindElementResponse:
     _, root_node = driver.dump_hierarchy()
     # TODO: support By.XPATH
     nodes = []
@@ -173,7 +179,7 @@ def click_element(driver: BaseDriver, params: FindElementRequest):
         if result.value:
             node = result.value[0]
             break
-        time.sleep(.5) # interval
+        time.sleep(0.5)  # interval
     if not node:
         raise ElementNotFoundError(f"element not found by {params.by}={params.value}")
     center_x = (node.bounds[0] + node.bounds[2]) / 2
@@ -185,4 +191,3 @@ def click_element(driver: BaseDriver, params: FindElementRequest):
 def app_list(driver: BaseDriver) -> List[AppInfo]:
     # added in v0.5.0
     return driver.app_list()
-

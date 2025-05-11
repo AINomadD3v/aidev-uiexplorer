@@ -5,11 +5,10 @@ import json as sysjson
 import platform
 import re
 import socket
-import subprocess
 import sys
 import typing
 import uuid
-from http.client import HTTPConnection, HTTPResponse
+from http.client import HTTPConnection
 from typing import List, Optional, TypeVar, Union
 
 from pydantic import BaseModel
@@ -36,7 +35,7 @@ def enable_windows_ansi_support():
 
 def default_json_encoder(obj):
     if isinstance(obj, bytes):
-        return f'<{obj.hex()}>'
+        return f"<{obj.hex()}>"
     if isinstance(obj, datetime.datetime):
         return str(obj)
     if isinstance(obj, uuid.UUID):
@@ -47,7 +46,7 @@ def default_json_encoder(obj):
 
 
 def print_json(buf, colored=None, default=default_json_encoder):
-    """ copy from pymobiledevice3 """
+    """copy from pymobiledevice3"""
     formatted_json = sysjson.dumps(buf, sort_keys=True, indent=4, default=default)
     if colored is None:
         if is_output_terminal():
@@ -57,8 +56,11 @@ def print_json(buf, colored=None, default=default_json_encoder):
             colored = False
 
     if colored:
-        colorful_json = highlight(formatted_json, lexers.JsonLexer(),
-                                  formatters.TerminalTrueColorFormatter(style='stata-dark'))
+        colorful_json = highlight(
+            formatted_json,
+            lexers.JsonLexer(),
+            formatters.TerminalTrueColorFormatter(style="stata-dark"),
+        )
         print(colorful_json)
     else:
         print(formatted_json)
@@ -68,7 +70,7 @@ _T = TypeVar("_T")
 
 
 def convert_to_type(value: str, _type: _T) -> _T:
-    """ usage example:
+    """usage example:
     convert_to_type("123", int)
     """
     if _type in (int, float, str):
@@ -83,7 +85,7 @@ def convert_to_type(value: str, _type: _T) -> _T:
 
 
 def convert_params_to_model(params: List[str], model: BaseModel) -> BaseModel:
-    """ used in cli.py """
+    """used in cli.py"""
     assert len(params) > 0
     if len(params) == 1:
         try:
@@ -133,9 +135,14 @@ class MySocketHTTPConnection(SocketHTTPConnection):
         self.sock.settimeout(self.timeout)
 
 
-def fetch_through_socket(sock: socket.socket, path: str, method: str = "GET", json: Optional[dict] = None,
-                         timeout: float = 60) -> bytearray:
-    """ usage example:
+def fetch_through_socket(
+    sock: socket.socket,
+    path: str,
+    method: str = "GET",
+    json: Optional[dict] = None,
+    timeout: float = 60,
+) -> bytearray:
+    """usage example:
     with socket.create_connection((host, port)) as s:
         request_through_socket(s, "GET", "/")
     """
@@ -144,7 +151,12 @@ def fetch_through_socket(sock: socket.socket, path: str, method: str = "GET", js
         if json is None:
             conn.request(method, path)
         else:
-            conn.request(method, path, body=sysjson.dumps(json), headers={"Content-Type": "application/json"})
+            conn.request(
+                method,
+                path,
+                body=sysjson.dumps(json),
+                headers={"Content-Type": "application/json"},
+            )
         response = conn.getresponse()
         if response.getcode() != 200:
             raise RequestError(f"request {method} {path}, status: {response.getcode()}")
@@ -157,7 +169,7 @@ def fetch_through_socket(sock: socket.socket, path: str, method: str = "GET", js
 
 
 def node_travel(node: Node, dfs: bool = True):
-    """ usage example:
+    """usage example:
     for n in node_travel(node):
         print(n)
     """
@@ -167,4 +179,3 @@ def node_travel(node: Node, dfs: bool = True):
         yield from node_travel(child, dfs)
     if dfs:
         yield node
-
