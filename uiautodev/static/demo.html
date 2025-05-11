@@ -7,11 +7,10 @@
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
-    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css">
 
     <style>
-        /* ... (your existing styles remain unchanged) ... */
+        /* ... (Your existing CSS rules from the previous version) ... */
 
         /* --- Global Resets & Font --- */
         :root { /* Same dark theme variables as before */
@@ -33,7 +32,7 @@
             border-bottom: 1px solid var(--dark-border-primary); flex-shrink: 0;
         }
         header h1 { margin: 0; font-size: 1.25em; font-weight: 500; }
-        #message-area { display: none; /* Kept in DOM for JS, but hidden */ }
+        #message-area { display: none; }
 
         .main-container { display: flex; flex-grow: 1; overflow: hidden; padding: 8px; gap: 8px; }
         .panel {
@@ -46,6 +45,13 @@
             border-bottom: 1px solid var(--dark-border-primary); background-color: #303031; 
             border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
         }
+        /* Added a container for right-aligned header buttons */
+        .panel-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px; /* Small gap between buttons */
+        }
+
         .panel-body { padding: 10px; flex-grow: 1; overflow: auto; display: flex; flex-direction: column; }
 
         #panel-device-view { flex: 0 0 30%; min-width: 300px; max-width: 420px; }
@@ -87,8 +93,9 @@
         #generated-xpath { width: 100%; padding: 7px; border: 1px solid var(--dark-border-primary); border-radius: 4px; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); font-family: var(--font-family-monospace); margin-top: 5px; font-size: 0.9em; }
         
         .tab-panel-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--dark-border-secondary); font-size: 0.95em; color: var(--dark-text-secondary); font-weight: 500; flex-shrink: 0; }
-        #refresh-hierarchy-btn { padding: 3px 7px; font-size: 0.9em; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; }
-        #refresh-hierarchy-btn:hover { background-color: var(--dark-accent-hover); border-color: var(--dark-accent-primary); color:white; }
+        /* Style for #refresh-hierarchy-btn removed from here as it's moved, it will use .device-selection-header-button style */
+        /* #refresh-hierarchy-btn { padding: 3px 7px; font-size: 0.9em; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; } */
+        /* #refresh-hierarchy-btn:hover { background-color: var(--dark-accent-hover); border-color: var(--dark-accent-primary); color:white; } */
 
         #hierarchy-search-input { width: 100%; padding: 6px 8px; margin-bottom: 10px; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; font-size: 0.9em; }
         #hierarchy-search-input:focus { border-color: var(--dark-accent-primary); outline: none; }
@@ -123,24 +130,9 @@
         .cm-s-material-darker .CodeMirror-activeline-background { background: var(--dark-bg-hover) !important; }
         .cm-s-material-darker .CodeMirror-selected { background: var(--dark-bg-active) !important; color: white !important; }
         
-        /* Hint addon styling to match dark theme */
-        .CodeMirror-hints {
-            background-color: var(--dark-bg-secondary) !important;
-            color: var(--dark-text-primary) !important;
-            border: 1px solid var(--dark-border-secondary) !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
-            font-family: var(--font-family-monospace) !important;
-            font-size: 12px !important;
-        }
-        .CodeMirror-hint {
-            padding: 3px 7px !important;
-            border-radius: 2px !important;
-        }
-        .CodeMirror-hint-active {
-            background-color: var(--dark-accent-primary) !important;
-            color: white !important;
-        }
-
+        .CodeMirror-hints { background-color: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border: 1px solid var(--dark-border-secondary) !important; box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important; font-family: var(--font-family-monospace) !important; font-size: 12px !important; }
+        .CodeMirror-hint { padding: 3px 7px !important; border-radius: 2px !important; }
+        .CodeMirror-hint-active { background-color: var(--dark-accent-primary) !important; color: white !important; }
 
         #run-python-button { padding: 8px 15px; margin-bottom: 10px; align-self: flex-start; }
         #interactive-python-output { flex-grow: 1; border: 1px solid var(--dark-border-primary); background-color: var(--dark-bg-primary); color: var(--dark-text-secondary); padding: 10px; white-space: pre-wrap; overflow-y: auto; font-family: var(--font-family-monospace); font-size: 12px; border-radius: 4px; min-height: 100px; }
@@ -149,11 +141,15 @@
 <body class="dark-theme"> 
     <header><h1>Local App Inspector</h1></header>
     <div id="message-area" style="display: none;">Initializing...</div>
+
     <div class="main-container">
         <div id="panel-device-view" class="panel">
             <div class="panel-header">
                 <span>Device View</span>
-                <button id="toggle-device-select-btn" class="device-selection-header-button" title="Toggle Device Selection">⚙️</button>
+                <div class="panel-header-actions">
+                    <button id="refresh-hierarchy-btn" class="device-selection-header-button" title="Refresh Screen & Hierarchy">🔄 Sync UI</button>
+                    <button id="toggle-device-select-btn" class="device-selection-header-button" title="Toggle Device Selection">⚙️</button>
+                </div>
             </div>
             <div class="panel-body">
                 <div id="device-selection-area-collapsible" class="device-selection-area collapsed">
@@ -171,14 +167,15 @@
                 </div>
             </div>
         </div>
+
         <div id="panel-properties" class="panel">
             <div class="panel-header">Element Details</div>
-            <div class="panel-body"> 
-                <h4>Selected Element Properties</h4>
-                <div id="element-properties-view">Select an element to see its properties.</div>
-                <h4 style="margin-top: 15px;">Generated XPath</h4>
-                <input type="text" id="generated-xpath" readonly placeholder="XPath will appear here">
-            </div>
+             <div class="panel-body"> 
+                 <h4>Selected Element Properties</h4>
+                 <div id="element-properties-view">Select an element to see its properties.</div>
+                 <h4 style="margin-top: 15px;">Generated XPath</h4>
+                 <input type="text" id="generated-xpath" readonly placeholder="XPath will appear here">
+             </div>
         </div>
 
         <div id="panel-hierarchy-code" class="panel">
@@ -190,8 +187,7 @@
                 <input type="text" id="hierarchy-search-input" placeholder="Search by name, text, ID, desc...">
                 <div class="tab-panel-header" style="margin-top: 8px;"> 
                     <span>Element Tree</span>
-                    <button id="refresh-hierarchy-btn" title="Refresh Screen & Hierarchy">🔄 Sync All</button>
-                </div>
+                    </div>
                 <div id="hierarchy-tree-view">Select a device and load hierarchy...</div>
             </div>
             <div id="python-tab-content" class="tab-content">
@@ -208,11 +204,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/keymap/vim.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/python-hint.min.js"></script> 
-    <script src="/static/python_console_module.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/anyword-hint.min.js"></script>
+    
+    <script src="/static/python_console_module.js"></script> 
     <script src="/static/local_inspector.js"></script> 
+    
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const toggleBtn = document.getElementById('toggle-device-select-btn');

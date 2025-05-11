@@ -1132,8 +1132,12 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // In static/local_inspector.js
+
   async function handleRunPythonCode() {
-    const pythonOutput = document.getElementById("interactive-python-output");
+    const pythonOutputDiv = document.getElementById(
+      "interactive-python-output",
+    ); // Renamed for clarity
     let code = "";
     if (
       window.PythonConsoleManager &&
@@ -1141,8 +1145,10 @@ document.addEventListener("DOMContentLoaded", function () {
     ) {
       code = window.PythonConsoleManager.getCode();
     } else {
-      console.error("PythonConsoleManager or getCode method is not available.");
-      alert("Python editor is not properly initialized.");
+      console.error(
+        "PythonConsoleManager or getCode method is not available. Cannot run Python code.",
+      );
+      alert("Python editor is not properly initialized. Cannot run code.");
       return;
     }
 
@@ -1150,7 +1156,7 @@ document.addEventListener("DOMContentLoaded", function () {
       alert("Please select a device first to run Python code.");
       return;
     }
-    if (!pythonOutput) {
+    if (!pythonOutputDiv) {
       console.error(
         "Python output element (#interactive-python-output) not found.",
       );
@@ -1161,26 +1167,77 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    pythonOutput.textContent = "Executing Python code...";
+    pythonOutputDiv.textContent = "Executing Python code..."; // Clear previous output
+    pythonOutputDiv.style.color = "var(--dark-text-secondary)"; // Default text color
+
     try {
       const responseData = await callBackend(
+        // callBackend is from local_inspector.js
         "POST",
         `/api/android/${currentDeviceSerial}/interactive_python`,
-        { code },
+        { code: code, enable_tracing: false }, // Explicitly set enable_tracing if needed
       );
-      pythonOutput.textContent =
-        typeof responseData === "object" &&
-        responseData !== null &&
-        responseData.hasOwnProperty("result")
-          ? String(responseData.result)
-          : String(responseData);
-      console.log("Python execution output:", pythonOutput.textContent);
+
+      let formattedOutput = "";
+
+      if (responseData) {
+        if (responseData.stdout && responseData.stdout.trim() !== "") {
+          formattedOutput += responseData.stdout;
+        }
+
+        // Display the result of an expression if it's not None/null and not empty
+        if (
+          responseData.result !== null &&
+          responseData.result !== undefined &&
+          String(responseData.result).trim() !== ""
+        ) {
+          // Add a newline before result if there was stdout, and ensure it's not just "None" from repr(None)
+          if (formattedOutput.length > 0 && !formattedOutput.endsWith("\n")) {
+            formattedOutput += "\n";
+          }
+          if (String(responseData.result) !== "None") {
+            // Avoid printing "None" for exec results
+            formattedOutput += `>>> ${responseData.result}\n`; // Mimic REPL output for expressions
+          }
+        }
+
+        if (responseData.stderr && responseData.stderr.trim() !== "") {
+          if (formattedOutput.length > 0 && !formattedOutput.endsWith("\n")) {
+            formattedOutput += "\n";
+          }
+          formattedOutput += "--- STDERR ---\n" + responseData.stderr;
+          // Consider changing text color for errors, or using a separate div.
+          // For simplicity here, just appending.
+        }
+
+        if (
+          responseData.execution_error &&
+          responseData.execution_error.trim() !== ""
+        ) {
+          if (formattedOutput.length > 0 && !formattedOutput.endsWith("\n")) {
+            formattedOutput += "\n";
+          }
+          formattedOutput +=
+            "--- TRACEBACK ---\n" + responseData.execution_error;
+          pythonOutputDiv.style.color = "var(--dark-error)"; // Change color for errors
+        }
+
+        // Optional: Display debug_log if you enable tracing and want to see it
+        // if (responseData.debug_log && DEBUG_ELEMENT_FINDING) { // Assuming DEBUG_ELEMENT_FINDING is a global flag
+        //     formattedOutput += "\n--- DEBUG LOG ---\n" + responseData.debug_log;
+        // }
+      } else {
+        formattedOutput = "# No structured output received from backend.";
+      }
+
+      pythonOutputDiv.textContent =
+        formattedOutput.trim() === "" ? "# No output" : formattedOutput;
     } catch (e) {
-      pythonOutput.textContent = `Error executing Python: ${e.message}`;
-      console.error("Error in handleRunPythonCode:", e);
+      pythonOutputDiv.textContent = `Error communicating with backend: ${e.message}`;
+      pythonOutputDiv.style.color = "var(--dark-error)";
+      console.error("Error in handleRunPythonCode during backend call:", e);
     }
   }
-
   async function sendDeviceCommand(commandName) {
     if (!currentDeviceSerial) {
       alert("Select device.");
