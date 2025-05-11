@@ -7,7 +7,6 @@ import adbutils
 
 from uiautodev.driver.android import AndroidDriver
 from uiautodev.driver.base_driver import BaseDriver
-from uiautodev.driver.mock import MockDriver
 from uiautodev.exceptions import UiautoException
 from uiautodev.model import DeviceInfo
 

@@ -10,10 +10,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css">
 
     <style>
-        /* ... (Your existing CSS rules from the previous version) ... */
-
         /* --- Global Resets & Font --- */
-        :root { /* Same dark theme variables as before */
+        :root {
             --dark-bg-primary: #1e1e1e; --dark-bg-secondary: #252526; --dark-bg-tertiary: #2d2d2d;
             --dark-bg-hover: #3a3d41; --dark-bg-active: #007acc; --dark-border-primary: #3f3f41;
             --dark-border-secondary: #505050; --dark-text-primary: #d4d4d4; --dark-text-secondary: #cccccc;
@@ -23,29 +21,41 @@
             --font-family-monospace: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
         }
         * { box-sizing: border-box; }
-        body { /* Dark theme applied by default */
+        body {
             font-family: var(--font-family-main); margin: 0; padding: 0; display: flex; flex-direction: column;
-            height: 100vh; background-color: var(--dark-bg-primary); color: var(--dark-text-primary); font-size: 13px; 
+            height: 100vh; background-color: var(--dark-bg-primary); color: var(--dark-text-primary); font-size: 13px;
         }
         header {
             background-color: var(--dark-bg-secondary); color: var(--dark-text-primary); padding: 10px 20px; text-align: center;
             border-bottom: 1px solid var(--dark-border-primary); flex-shrink: 0;
         }
         header h1 { margin: 0; font-size: 1.25em; font-weight: 500; }
-        #message-area { display: none; }
+        #message-area {
+            padding: 8px 15px;
+            text-align: center;
+            background-color: var(--dark-bg-tertiary);
+            color: var(--dark-text-secondary);
+            font-size: 0.9em;
+            display: none; /* Initially hidden, shown by JS */
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            z-index: 10000; /* Ensure it's on top */
+            border-top: 1px solid var(--dark-border-primary);
+        }
 
         .main-container { display: flex; flex-grow: 1; overflow: hidden; padding: 8px; gap: 8px; }
         .panel {
             background-color: var(--dark-bg-secondary); border: 1px solid var(--dark-border-primary);
             border-radius: 4px; padding: 0; display: flex; flex-direction: column; overflow: hidden;
         }
-        
+
         .panel-header {
             font-size: 0.95em; font-weight: 500; padding: 8px 12px; color: var(--dark-text-secondary);
-            border-bottom: 1px solid var(--dark-border-primary); background-color: #303031; 
+            border-bottom: 1px solid var(--dark-border-primary); background-color: #303031;
             border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
         }
-        /* Added a container for right-aligned header buttons */
         .panel-header-actions {
             display: flex;
             align-items: center;
@@ -55,9 +65,9 @@
         .panel-body { padding: 10px; flex-grow: 1; overflow: auto; display: flex; flex-direction: column; }
 
         #panel-device-view { flex: 0 0 30%; min-width: 300px; max-width: 420px; }
-        #panel-properties { flex: 0 0 35%; min-width: 280px; }
+        #panel-properties { flex: 0 0 35%; min-width: 320px; /* Increased min-width for LLM panel */ }
         #panel-hierarchy-code { flex: 1; min-width: 250px; }
-        
+
         .device-selection-header-button { background: none; border: none; color: var(--dark-text-secondary); cursor: pointer; padding: 2px 6px; font-size: 1.1em; border-radius: 3px; line-height: 1;}
         .device-selection-header-button:hover { background-color: var(--dark-bg-hover); }
         .device-selection-area { margin: 10px 0; padding: 10px; background-color: var(--dark-bg-tertiary); border: 1px solid var(--dark-border-secondary); border-radius: 4px;}
@@ -76,27 +86,266 @@
         .device-controls button:hover { background-color: var(--dark-accent-hover); border-color: var(--dark-accent-primary); color: white; }
 
         .tabs { display: flex; margin-bottom: 0; border-bottom: 1px solid var(--dark-border-primary); flex-shrink: 0; background-color: var(--dark-bg-secondary) }
-        .tab-button { padding: 8px 14px; cursor: pointer; background-color: transparent; border: none; border-bottom: 2px solid transparent; color: var(--dark-text-secondary); transition: color 0.2s ease, border-color 0.2s ease; margin-right: 1px; font-size: 0.9em; }
+        .tab-button { padding: 8px 14px; cursor: pointer; background-color: transparent; border: none; border-bottom: 2px solid transparent; color: var(--dark-text-secondary); transition: color 0.2s ease, border-color 0.2s ease; margin-right: 1px; font-size: 0.9em; white-space: nowrap; }
         .tab-button.active { color: var(--dark-accent-primary); font-weight: 500; border-bottom-color: var(--dark-accent-primary); }
         .tab-button:hover:not(.active) { color: var(--dark-text-primary); background-color: var(--dark-bg-hover); }
 
-        .tab-content { display: none; flex-grow: 1; flex-direction: column; padding: 10px; overflow: hidden; }
+        .tab-content { display: none; flex-grow: 1; flex-direction: column; /* Default padding removed, content will manage */ overflow: hidden; }
         .tab-content.active { display: flex; }
 
-        #panel-properties .panel-body { padding: 0; } 
-        #element-properties-view, #generated-xpath-container { font-size: 0.85em; overflow-y: auto; flex-grow: 1; padding:10px; }
-        #element-properties-view h4, #generated-xpath-container h4 { font-size: 0.95em; color: var(--dark-text-secondary); margin-top: 0; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--dark-border-secondary); font-weight:500; }
+        /* Styles for #panel-properties and its internal tabs */
+        #panel-properties .panel-header { display: none; /* Hide original panel header as tabs will serve as header */ }
+        #panel-properties .tabs { border-radius: 4px 4px 0 0; /* Match panel rounding */ }
+        #panel-properties > .tab-content { /* Ensure it fills the panel body correctly */
+            flex-grow: 1;
+            overflow: hidden; /* Important for nested scrollable areas */
+            padding: 0; /* Remove default padding, content will manage its own */
+        }
+        #panel-properties > .tab-content.active {
+            display: flex; /* Ensure it's flex to allow panel-body to grow */
+        }
+        /* Element Details Tab Specifics */
+        #element-details-tab-content { /* This now becomes a direct child of panel-properties */
+            /* Styles specific to how element-details-tab-content itself should behave if needed, e.g. padding */
+             padding: 0; /* No default padding, panel-body-content will have it */
+        }
+        #element-details-tab-content .panel-body-content { /* New wrapper for padding and scrolling */
+            padding: 10px;
+            flex-grow: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        #element-details-tab-content h4 {
+            font-size: 0.95em; color: var(--dark-text-secondary); margin-top: 0; margin-bottom: 8px;
+            padding-bottom: 5px; border-bottom: 1px solid var(--dark-border-secondary); font-weight:500;
+        }
+        #element-details-tab-content #generated-xpath-container {
+             margin-top: 15px; /* Space above XPath input */
+        }
         .properties-panel table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
         .properties-panel th, .properties-panel td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--dark-border-primary); vertical-align: top; }
         .properties-panel th { background-color: var(--dark-bg-tertiary); color: var(--dark-text-secondary); width: 30%; font-weight: normal; }
         .properties-panel td { word-break: break-all; color: var(--dark-text-primary); }
         #generated-xpath { width: 100%; padding: 7px; border: 1px solid var(--dark-border-primary); border-radius: 4px; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); font-family: var(--font-family-monospace); margin-top: 5px; font-size: 0.9em; }
-        
-        .tab-panel-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--dark-border-secondary); font-size: 0.95em; color: var(--dark-text-secondary); font-weight: 500; flex-shrink: 0; }
-        /* Style for #refresh-hierarchy-btn removed from here as it's moved, it will use .device-selection-header-button style */
-        /* #refresh-hierarchy-btn { padding: 3px 7px; font-size: 0.9em; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; } */
-        /* #refresh-hierarchy-btn:hover { background-color: var(--dark-accent-hover); border-color: var(--dark-accent-primary); color:white; } */
 
+        /* LLM Assistant Styles */
+        #llm-assistant-tab-content { /* This now becomes a direct child of panel-properties */
+             display: flex; /* Ensure it uses flex for its children */
+             flex-direction: column; /* Stack panel-body-llm inside */
+             overflow: hidden; /* Manage overflow for the whole tab */
+        }
+        #llm-assistant-tab-content .panel-body-llm { /* Specific class for LLM panel body */
+            display: flex;
+            flex-direction: row; /* Main chat and context sidebar side-by-side */
+            gap: 5px;
+            padding: 5px; /* Small padding around the two sub-panels */
+            flex-grow: 1;
+            overflow: hidden; /* Key for children to scroll independently */
+            background-color: var(--dark-bg-secondary); /* Match panel bg */
+        }
+        .llm-chat-main {
+            flex-grow: 1; /* Takes available space */
+            display: flex;
+            flex-direction: column;
+            background-color: var(--dark-bg-primary); /* Inner chat area background */
+            border-radius: 3px;
+            overflow:hidden; /* Children will scroll */
+            border: 1px solid var(--dark-border-primary);
+            min-width: 0; /* Prevent flexbox overflow issues */
+        }
+        #llm-chat-history {
+            flex-grow: 1;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 0.9em;
+            line-height: 1.5;
+            color: var(--dark-text-primary);
+        }
+        .llm-message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            max-width: 90%; /* Or slightly less to ensure it doesn't touch edges */
+            word-wrap: break-word;
+            clear: both; /* Ensure messages don't overlap if float is used */
+        }
+        .llm-message-user {
+            background-color: var(--dark-accent-primary);
+            color: white;
+            margin-left: auto; /* Pushes to the right */
+            float: right; /* Alternative to margin-left: auto */
+            text-align: left;
+        }
+        .llm-message-assistant {
+            background-color: var(--dark-bg-secondary); /* Slightly lighter than chat history bg */
+            border: 1px solid var(--dark-border-primary);
+            margin-right: auto; /* Pushes to the left */
+            float: left; /* Alternative to margin-right: auto */
+        }
+        .llm-message p { margin: 0; }
+        .llm-message pre {
+            background-color: var(--dark-bg-tertiary);
+            border: 1px solid var(--dark-border-secondary);
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto; /* Horizontal scroll for long code lines */
+            font-size: 0.85em;
+            position: relative; /* For copy/insert buttons */
+            margin-top: 8px;
+            margin-bottom: 5px;
+            white-space: pre; /* Preserves all whitespace including line breaks */
+            color: var(--dark-text-primary); /* Ensure code text is visible */
+        }
+        .llm-message code { /* Inline code or code within pre */
+            font-family: var(--font-family-monospace);
+            background-color: transparent; /* Ensure no double background */
+            padding: 0; /* Reset padding if any */
+        }
+        .llm-code-action-buttons {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            display: flex;
+            gap: 5px;
+            opacity: 0; /* Hidden by default */
+            transition: opacity 0.2s ease-in-out;
+        }
+        .llm-message pre:hover .llm-code-action-buttons {
+            opacity: 1; /* Show on hover */
+        }
+        .llm-code-copy-btn, .llm-code-insert-btn {
+            background-color: var(--dark-bg-hover);
+            color: var(--dark-text-secondary);
+            border: 1px solid var(--dark-border-secondary);
+            border-radius: 3px;
+            padding: 3px 7px;
+            font-size: 0.75em;
+            cursor: pointer;
+        }
+        .llm-code-copy-btn:hover, .llm-code-insert-btn:hover {
+            background-color: var(--dark-accent-hover);
+            color: white;
+        }
+        .llm-prompt-area {
+            padding: 8px;
+            border-top: 1px solid var(--dark-border-primary);
+            display: flex;
+            gap: 8px;
+            background-color: var(--dark-bg-secondary);
+            align-items: flex-end; /* Align items to bottom if textarea grows */
+            flex-shrink: 0; /* Prevent this area from shrinking */
+        }
+        #llm-prompt-input {
+            background-color: var(--dark-bg-primary);
+            color: var(--dark-text-primary);
+            border: 1px solid var(--dark-border-primary);
+            border-radius: 4px;
+            padding: 8px;
+            font-family: var(--font-family-main);
+            font-size: 0.9em;
+            flex-grow: 1;
+            resize: none;
+            min-height: 38px; /* Approx 1 row + padding */
+            max-height: 120px; /* Limit growth */
+            overflow-y: auto; /* Scroll if content exceeds max-height */
+        }
+        #llm-send-prompt-btn {
+            padding: 0 12px; /* Adjust padding for icon button */
+            font-size: 1.2em; /* Make send icon a bit bigger */
+            line-height: 36px; /* Vertically center icon in fixed height */
+            border: 1px solid var(--dark-border-primary);
+            background-color: var(--dark-bg-tertiary);
+            color: var(--dark-text-primary);
+            border-radius: 4px;
+            cursor: pointer;
+            align-self: flex-end; /* Keep button at bottom if textarea grows */
+            height: 38px; /* Match min-height of textarea */
+            width: 40px; /* Fixed width for send button */
+            text-align: center;
+        }
+        #llm-send-prompt-btn:hover {
+            background-color: var(--dark-accent-hover);
+            color: white;
+        }
+        .llm-context-sidebar {
+            flex: 0 0 230px; /* Slightly wider context panel */
+            padding: 10px;
+            background-color: var(--dark-bg-tertiary);
+            border-radius: 3px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-left: 1px solid var(--dark-border-primary); /* Changed from border to border-left for consistency */
+            min-width: 200px; /* Prevent it from becoming too small */
+        }
+        .llm-context-sidebar h5 {
+            margin: 0 0 8px 0;
+            color: var(--dark-text-secondary);
+            font-size: 0.9em;
+            border-bottom: 1px solid var(--dark-border-secondary);
+            padding-bottom: 6px;
+            font-weight: 500;
+        }
+        .llm-context-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.85em;
+            color: var(--dark-text-secondary);
+            padding: 6px 4px;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+            /* cursor: pointer; /* Only if the whole label should be clickable like a button */
+        }
+        .llm-context-item label { /* Make the label itself clickable for the checkbox */
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            width: 100%; /* Ensure label takes full width for hover effect */
+        }
+        .llm-context-item:hover {
+            background-color: var(--dark-bg-hover);
+        }
+        .llm-context-item input[type="checkbox"] {
+            margin-right: 8px;
+            accent-color: var(--dark-accent-primary);
+            transform: scale(0.9);
+            cursor: pointer;
+        }
+        .llm-context-item select {
+            margin-left: auto; /* Push select to the right */
+            font-size: 0.9em;
+            padding: 2px 4px;
+            background-color: var(--dark-bg-primary);
+            color: var(--dark-text-primary);
+            border: 1px solid var(--dark-border-secondary);
+            border-radius: 3px;
+            max-width: 100px; /* Prevent select from being too wide */
+        }
+        #llm-clear-conversation-btn {
+            width: 100%;
+            padding: 7px 10px;
+            font-size: 0.85em;
+            border: 1px solid var(--dark-border-primary);
+            background-color: var(--dark-bg-tertiary);
+            color: var(--dark-text-primary);
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: auto; /* Pushes to bottom */
+        }
+        #llm-clear-conversation-btn:hover {
+            background-color: var(--dark-error); /* Use error color for destructive action */
+            border-color: var(--dark-error);
+            color: white;
+        }
+        .small-button {
+            padding: 5px 8px;
+            font-size: 0.85em;
+        }
+
+        /* Hierarchy Panel & Python Console Panel */
+        .tab-panel-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--dark-border-secondary); font-size: 0.95em; color: var(--dark-text-secondary); font-weight: 500; flex-shrink: 0; }
         #hierarchy-search-input { width: 100%; padding: 6px 8px; margin-bottom: 10px; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; font-size: 0.9em; }
         #hierarchy-search-input:focus { border-color: var(--dark-accent-primary); outline: none; }
         #hierarchy-tree-view { flex-grow: 1; overflow: auto; font-size: 0.85em; font-family: var(--font-family-monospace); line-height: 1.65; padding-right: 5px; padding-bottom: 5px; }
@@ -118,8 +367,7 @@
         #hierarchy-tree-view li.tree-node-selected > .node-content > .node-text-wrapper small,
         #hierarchy-tree-view li.tree-node-selected > .node-content > .toggle { color: white !important; }
         #hierarchy-tree-view small { color: #808080; font-size: 0.9em; }
-        body.dark-theme #hierarchy-tree-view small { color: #6a6a6a; } 
-
+        body.dark-theme #hierarchy-tree-view small { color: #6a6a6a; }
 
         /* Styles for CodeMirror 5 */
         .CodeMirror { height: 200px; border: 1px solid var(--dark-border-primary); border-radius: 4px; font-family: var(--font-family-monospace) !important; font-size: 13px !important; line-height: 1.4; margin-bottom: 10px; width: 100%; }
@@ -129,16 +377,17 @@
         .cm-s-material-darker .CodeMirror-cursor { border-left: 1px solid var(--dark-text-primary) !important; }
         .cm-s-material-darker .CodeMirror-activeline-background { background: var(--dark-bg-hover) !important; }
         .cm-s-material-darker .CodeMirror-selected { background: var(--dark-bg-active) !important; color: white !important; }
-        
+
         .CodeMirror-hints { background-color: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border: 1px solid var(--dark-border-secondary) !important; box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important; font-family: var(--font-family-monospace) !important; font-size: 12px !important; }
         .CodeMirror-hint { padding: 3px 7px !important; border-radius: 2px !important; }
         .CodeMirror-hint-active { background-color: var(--dark-accent-primary) !important; color: white !important; }
 
-        #run-python-button { padding: 8px 15px; margin-bottom: 10px; align-self: flex-start; }
+        #run-python-button { padding: 8px 15px; margin-bottom: 10px; align-self: flex-start; border: 1px solid var(--dark-border-primary); background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border-radius: 4px; cursor: pointer;}
+        #run-python-button:hover { background-color: var(--dark-accent-hover); border-color: var(--dark-accent-primary); color:white; }
         #interactive-python-output { flex-grow: 1; border: 1px solid var(--dark-border-primary); background-color: var(--dark-bg-primary); color: var(--dark-text-secondary); padding: 10px; white-space: pre-wrap; overflow-y: auto; font-family: var(--font-family-monospace); font-size: 12px; border-radius: 4px; min-height: 100px; }
     </style>
 </head>
-<body class="dark-theme"> 
+<body class="dark-theme">
     <header><h1>Local App Inspector</h1></header>
     <div id="message-area" style="display: none;">Initializing...</div>
 
@@ -168,26 +417,68 @@
             </div>
         </div>
 
-        <div id="panel-properties" class="panel">
-            <div class="panel-header">Element Details</div>
-             <div class="panel-body"> 
-                 <h4>Selected Element Properties</h4>
-                 <div id="element-properties-view">Select an element to see its properties.</div>
-                 <h4 style="margin-top: 15px;">Generated XPath</h4>
-                 <input type="text" id="generated-xpath" readonly placeholder="XPath will appear here">
-             </div>
+        <div id="panel-properties" class="panel"> <div class="tabs" id="properties-panel-tabs"> <button class="tab-button active" onclick="window.openPropertiesTab(event, 'element-details-tab-content')">Element Details</button>
+                <button class="tab-button" onclick="window.openPropertiesTab(event, 'llm-assistant-tab-content')">LLM Assistant</button>
+            </div>
+
+            <div id="element-details-tab-content" class="tab-content active">
+                <div class="panel-body-content"> <h4>Selected Element Properties</h4>
+                    <div id="element-properties-view">Select an element to see its properties.</div>
+                    <div id="generated-xpath-container">
+                        <h4>Generated XPath</h4>
+                        <input type="text" id="generated-xpath" readonly placeholder="XPath will appear here">
+                    </div>
+                </div>
+            </div>
+
+            <div id="llm-assistant-tab-content" class="tab-content">
+                <div class="panel-body-llm"> <div class="llm-chat-main"> <div id="llm-chat-history">
+                            </div>
+                        <div class="llm-prompt-area">
+                            <textarea id="llm-prompt-input" placeholder="Type your message..." rows="1"></textarea>
+                            <button id="llm-send-prompt-btn" title="Send Message">➤</button>
+                        </div>
+                    </div>
+
+                    <div class="llm-context-sidebar"> <h5>Attach Context:</h5>
+                        <label class="llm-context-item">
+                            <input type="checkbox" id="llm-context-ui-hierarchy" data-context-key="uiHierarchy"> Current UI Hierarchy
+                        </label>
+                        <label class="llm-context-item">
+                            <input type="checkbox" id="llm-context-selected-element" data-context-key="selectedElement" checked> Selected Element
+                        </label>
+                        <label class="llm-context-item">
+                            <input type="checkbox" id="llm-context-python-console-output" data-context-key="pythonConsoleOutput"> Python Console
+                            <select id="llm-context-python-console-output-lines">
+                                <option value="lastError">Last Error</option>
+                                <option value="5" selected>Last 5</option>
+                                <option value="10">Last 10</option>
+                                <option value="all">All</option>
+                            </select>
+                        </label>
+                        <label class="llm-context-item">
+                            <input type="checkbox" id="llm-context-python-code" data-context-key="pythonCode"> Python Code
+                        </label>
+                        <label class="llm-context-item">
+                            <input type="checkbox" id="llm-context-device-info" data-context-key="deviceInfo"> Device Info
+                        </label>
+
+                        <button id="llm-clear-conversation-btn" class="small-button">Clear Chat & Context</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="panel-hierarchy-code" class="panel">
-            <div class="tabs"> 
+            <div class="tabs">
                 <button class="tab-button active" onclick="window.openTab(event, 'hierarchy-tab-content')">UI Hierarchy</button>
                 <button class="tab-button" onclick="window.openTab(event, 'python-tab-content')">Python Console</button>
             </div>
-            <div id="hierarchy-tab-content" class="tab-content active"> 
+            <div id="hierarchy-tab-content" class="tab-content active">
                 <input type="text" id="hierarchy-search-input" placeholder="Search by name, text, ID, desc...">
-                <div class="tab-panel-header" style="margin-top: 8px;"> 
+                <div class="tab-panel-header" style="margin-top: 8px;">
                     <span>Element Tree</span>
-                    </div>
+                </div>
                 <div id="hierarchy-tree-view">Select a device and load hierarchy...</div>
             </div>
             <div id="python-tab-content" class="tab-content">
@@ -206,11 +497,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/anyword-hint.min.js"></script>
-    
-    <script src="/static/python_console_module.js"></script> 
-    <script src="/static/local_inspector.js"></script> 
-    
-    <script>
+
+    <script src="/static/python_console_module.js"></script>
+    <script src="/static/local_inspector.js"></script>
+    <script src="/static/llm_assistant_module.js"></script> <script>
         document.addEventListener('DOMContentLoaded', function() {
             const toggleBtn = document.getElementById('toggle-device-select-btn');
             const deviceMenu = document.getElementById('device-selection-area-collapsible');
@@ -218,6 +508,30 @@
                 toggleBtn.addEventListener('click', function() {
                     deviceMenu.classList.toggle('collapsed');
                 });
+            }
+
+            // Initialize the default tab for #panel-properties
+            // The LlmAssistantModule makes openPropertiesTab global.
+            // We need to ensure the first tab is displayed correctly on load.
+            const defaultPropertiesTabButton = document.querySelector("#properties-panel-tabs .tab-button.active");
+            if (defaultPropertiesTabButton && window.openPropertiesTab) {
+                 // Simulate a click on the default active tab button to ensure its content is shown
+                const defaultTabName = defaultPropertiesTabButton.getAttribute('onclick').match(/openPropertiesTab\(event, ['"]([^'"]+)['"]\)/)[1];
+                if (defaultTabName) {
+                    window.openPropertiesTab({ currentTarget: defaultPropertiesTabButton }, defaultTabName);
+                }
+            } else {
+                // Fallback if no tab is marked active initially, activate the first one.
+                 const firstPropertiesTabButton = document.querySelector("#properties-panel-tabs .tab-button");
+                 if(firstPropertiesTabButton && window.openPropertiesTab) {
+                    const firstTabName = firstPropertiesTabButton.getAttribute('onclick').match(/openPropertiesTab\(event, ['"]([^'"]+)['"]\)/)[1];
+                    if (firstTabName) {
+                         window.openPropertiesTab({ currentTarget: firstPropertiesTabButton }, firstTabName);
+                         // Also, ensure the button itself gets the 'active' class if not already set
+                         document.querySelectorAll("#properties-panel-tabs .tab-button").forEach(btn => btn.classList.remove('active'));
+                         firstPropertiesTabButton.classList.add('active');
+                    }
+                 }
             }
         });
     </script>

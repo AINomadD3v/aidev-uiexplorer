@@ -193,6 +193,7 @@
             pygments
             uvloop
             httptools
+            python-dotenv
 
             adbutilsCustom
             uiautomator2Custom

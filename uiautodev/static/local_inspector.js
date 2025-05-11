@@ -33,6 +33,7 @@ document.addEventListener("DOMContentLoaded", function () {
     ".device-screen-container",
   );
   const hierarchyTreeViewEl = document.getElementById("hierarchy-tree-view");
+  // Element Properties View and XPath are now within a tab, but IDs remain global
   const elementPropertiesViewEl = document.getElementById(
     "element-properties-view",
   );
@@ -41,16 +42,13 @@ document.addEventListener("DOMContentLoaded", function () {
     "hierarchy-search-input",
   );
 
-  // pythonCmEditor is now managed by PythonConsoleManager
-  // let pythonCmEditor = null;
-
   // --- State ---
   let currentDeviceSerial = null;
   let devices = [];
   let currentHierarchyData = null;
   let isHierarchyLoading = false;
-  let selectedNodePath = null;
-  let selectedNode = null;
+  let selectedNodePath = null; // Key of the selected node
+  let selectedNode = null; // The selected node object
   let hoveredNode = null;
   let actualDeviceWidth = null;
   let actualDeviceHeight = null;
@@ -58,7 +56,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const DEBUG_ELEMENT_FINDING = true;
   let canvasTooltip = null;
 
-  function updateMessage(text, type = "info") {
+  function updateMessage(text, type = "info", duration = 4000) {
+    // Added duration parameter
     if (messageArea) {
       messageArea.textContent = text;
       messageArea.className = "";
@@ -69,11 +68,12 @@ document.addEventListener("DOMContentLoaded", function () {
             ? "var(--dark-warning)"
             : "var(--dark-text-secondary)";
       messageArea.style.display = "block";
-      if (type !== "error" && type !== "warning") {
+      if (type !== "error" && type !== "warning" && duration > 0) {
+        // Check duration
         setTimeout(() => {
           if (messageArea && messageArea.textContent === text)
             messageArea.style.display = "none";
-        }, 4000);
+        }, duration);
       }
     } else {
       if (type === "error") console.error("Status:", text);
@@ -438,6 +438,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if (elementPropertiesViewEl) elementPropertiesViewEl.innerHTML = "";
     if (generatedXpathEl) generatedXpathEl.value = "";
     updateMessage("No device selected or device disconnected.", "info");
+    // Notify LLM module that selection is cleared
+    if (
+      window.LlmAssistantModule &&
+      typeof window.LlmAssistantModule.notifyNodeSelectionChanged === "function"
+    ) {
+      window.LlmAssistantModule.notifyNodeSelectionChanged(null);
+    }
   }
 
   async function handleDeviceSelectionChange() {
@@ -454,7 +461,7 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log(
         "handleDeviceSelectionChange: No device serial selected. Clearing info.",
       );
-      clearDeviceInfo();
+      clearDeviceInfo(); // This will also notify LLM module
       return;
     }
     currentDeviceSerial = newSerial;
@@ -469,6 +476,15 @@ document.addEventListener("DOMContentLoaded", function () {
     if (overlayCtx)
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     updateMessage(`Loading ${currentDeviceSerial}...`, "info");
+
+    // Notify LLM module of cleared selection before loading new data
+    if (
+      window.LlmAssistantModule &&
+      typeof window.LlmAssistantModule.notifyNodeSelectionChanged === "function"
+    ) {
+      window.LlmAssistantModule.notifyNodeSelectionChanged(null);
+    }
+
     try {
       await fetchAndDisplayScreenshot();
       const hierarchyTabContent = document.getElementById(
@@ -496,7 +512,7 @@ document.addEventListener("DOMContentLoaded", function () {
         error,
       );
       updateMessage(`Error setting up device ${currentDeviceSerial}.`, "error");
-      clearDeviceInfo();
+      clearDeviceInfo(); // This will also notify LLM module
     }
   }
 
@@ -705,6 +721,7 @@ document.addEventListener("DOMContentLoaded", function () {
       handleTreeSelection(node);
     });
     if (node.key === selectedNodePath) {
+      // Use selectedNodePath (key) for comparison
       li.classList.add("tree-node-selected");
     }
     if (childUl && node.children) {
@@ -724,15 +741,18 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log(
         `TREE_SELECTION: Node selected/clicked: ${node.name} (Key: ${node.key})`,
       );
-    selectedNodePath = node.key;
-    selectedNode = node;
+    selectedNodePath = node.key; // Store the key
+    selectedNode = node; // Store the full node object
+
     displayNodeProperties(node);
     drawNodeOverlays();
+
     const previouslySelectedLi = hierarchyTreeViewEl.querySelector(
       "li.tree-node-selected",
     );
     if (previouslySelectedLi)
       previouslySelectedLi.classList.remove("tree-node-selected");
+
     const safeNodeKey = String(node.key).replace(/[^a-zA-Z0-9-_]/g, "_");
     const targetLi = document.getElementById(`li-key-${safeNodeKey}`);
     if (targetLi) {
@@ -746,6 +766,14 @@ document.addEventListener("DOMContentLoaded", function () {
     } else {
       if (DEBUG_ELEMENT_FINDING)
         console.warn("TREE_SELECTION: Could not find li for key", node.key);
+    }
+
+    // Notify LLM module of selection change
+    if (
+      window.LlmAssistantModule &&
+      typeof window.LlmAssistantModule.notifyNodeSelectionChanged === "function"
+    ) {
+      window.LlmAssistantModule.notifyNodeSelectionChanged(selectedNode);
     }
   }
 
@@ -784,11 +812,11 @@ document.addEventListener("DOMContentLoaded", function () {
         targetLi.scrollIntoView({
           behavior: "smooth",
           block: "nearest",
-          inline: "center",
+          inline: "center", // "nearest" or "center" can be good too
         });
         if (DEBUG_ELEMENT_FINDING)
           console.log("HIERARCHY_SCROLL: Scrolled to", targetLi.id);
-      }, 50);
+      }, 50); // Small delay for expansions to render
     } else {
       if (DEBUG_ELEMENT_FINDING)
         console.warn("HIERARCHY_SCROLL: Could not find li for key:", nodeKey);
@@ -796,11 +824,13 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function displayNodeProperties(node) {
-    const elementPropertiesViewEl = document.getElementById(
-      "element-properties-view",
-    );
-    const generatedXpathEl = document.getElementById("generated-xpath");
-    if (!elementPropertiesViewEl || !generatedXpathEl) return;
+    // elementPropertiesViewEl and generatedXpathEl are already fetched at the top
+    if (!elementPropertiesViewEl || !generatedXpathEl) {
+      console.warn(
+        "displayNodeProperties: Essential property view elements not found.",
+      );
+      return;
+    }
     if (!node) {
       elementPropertiesViewEl.innerHTML = "No node selected.";
       generatedXpathEl.value = "";
@@ -812,10 +842,13 @@ document.addEventListener("DOMContentLoaded", function () {
         html += `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(String(node.properties[k]))}</td></tr>`;
     }
     if (node.name)
+      // Typically class name
       html += `<tr><th>class</th><td>${escapeHtml(node.name)}</td></tr>`;
     if (node.rect)
+      // Absolute coordinates if available
       html += `<tr><th>rect (device)</th><td>x:${node.rect.x}, y:${node.rect.y}, w:${node.rect.width}, h:${node.rect.height}</td></tr>`;
     if (node.bounds && Array.isArray(node.bounds))
+      // Relative bounds
       html += `<tr><th>bounds (relative)</th><td>${node.bounds.map((b) => (typeof b === "number" ? b.toFixed(4) : String(b))).join(", ")}</td></tr>`;
     html += "</table>";
     elementPropertiesViewEl.innerHTML = html;
@@ -833,22 +866,29 @@ document.addEventListener("DOMContentLoaded", function () {
   function generateBasicXPath(node) {
     if (!node || !node.properties) return "";
     const p = node.properties;
-    const c = escapeHtml(p["class"] || node.name || "*");
+    const c = escapeHtml(p["class"] || node.name || "*"); // Use class from properties first, then node.name
     if (p["resource-id"])
       return `//*[@resource-id='${escapeHtml(p["resource-id"])}']`;
     if (p["text"])
-      return `//${c}[@text='${escapeHtml(p["text"]).replace(/'/g, "&apos;")}']`;
+      return `//${c}[@text='${escapeHtml(p["text"]).replace(/'/g, "&apos;")}']`; // XML apos for single quotes in text
     if (p["content-desc"])
       return `//${c}[@content-desc='${escapeHtml(p["content-desc"]).replace(/'/g, "&apos;")}']`;
-    return `//${c}`;
+    // More generic fallback if other specific identifiers aren't present
+    // This might need refinement based on actual hierarchy structure and desired XPath complexity
+    let path = `//${c}`;
+    // Add index if there are multiple siblings of the same class (a very basic indexing)
+    // This logic is simplified and might not always produce the most robust XPath.
+    // Consider more advanced XPath generation if needed.
+    return path;
   }
   const KNOWN_OVERLAY_IDS = [
-    "com.instagram.androie:id/overlay_layout_container",
+    "com.instagram.androie:id/overlay_layout_container", // Typo 'androie' -> 'android' ?
     "com.instagram.androie:id/quick_capture_root_container",
   ];
   function findBestElementFromCandidates(candidates, relX, relY) {
     if (!candidates || candidates.length === 0) return null;
     if (candidates.length === 1) return candidates[0];
+
     candidates.sort((a, b) => {
       const aBoundsValid =
         a.bounds &&
@@ -858,29 +898,40 @@ document.addEventListener("DOMContentLoaded", function () {
         b.bounds &&
         b.bounds.length === 4 &&
         b.bounds.every((val) => typeof val === "number" && !isNaN(val));
+
       if (!aBoundsValid && bBoundsValid) return 1;
       if (aBoundsValid && !bBoundsValid) return -1;
       if (!aBoundsValid && !bBoundsValid) return 0;
+
+      // Penalize known overlay elements if they are not the only option
       const aIsKnownOverlay = KNOWN_OVERLAY_IDS.includes(
         a.properties?.["resource-id"],
       );
       const bIsKnownOverlay = KNOWN_OVERLAY_IDS.includes(
         b.properties?.["resource-id"],
       );
-      if (aIsKnownOverlay && !bIsKnownOverlay) return 1;
-      if (!aIsKnownOverlay && bIsKnownOverlay) return -1;
+      if (aIsKnownOverlay && !bIsKnownOverlay && candidates.length > 1)
+        return 1; // Prefer non-overlay
+      if (!aIsKnownOverlay && bIsKnownOverlay && candidates.length > 1)
+        return -1; // Prefer non-overlay
+
+      // Prefer clickable
       const aClickable = a.properties?.clickable === "true";
       const bClickable = b.properties?.clickable === "true";
       if (aClickable && !bClickable) return -1;
       if (!aClickable && bClickable) return 1;
+
+      // Prefer smaller area (more specific)
       const aArea = (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]);
       const bArea = (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]);
-      if (Math.abs(aArea - bArea) < 0.001) {
+
+      if (Math.abs(aArea - bArea) < 0.0001) {
+        // If areas are very similar, use attribute score
         const aScore =
           (a.properties?.["resource-id"] ? 2 : 0) +
           (a.properties?.text ? 1 : 0) +
           (a.properties?.["content-desc"] ? 1 : 0) -
-          (a.name === "android.widget.FrameLayout" ||
+          (a.name === "android.widget.FrameLayout" || // Penalize generic layouts if specific ones exist
           a.name === "android.view.ViewGroup"
             ? 1
             : 0);
@@ -895,10 +946,11 @@ document.addEventListener("DOMContentLoaded", function () {
         if (aScore > bScore) return -1;
         if (bScore > aScore) return 1;
       } else {
+        // Otherwise, prefer smaller area
         if (aArea < bArea) return -1;
         if (aArea > bArea) return 1;
       }
-      return 0;
+      return 0; // Default: no change in order
     });
     if (DEBUG_ELEMENT_FINDING && candidates.length > 0)
       console.log(
@@ -915,17 +967,29 @@ document.addEventListener("DOMContentLoaded", function () {
       node.bounds.some((b) => typeof b !== "number" || isNaN(b))
     )
       return;
+
     const [x1, y1, x2, y2] = node.bounds;
     const nodeWidth = x2 - x1;
     const nodeHeight = y2 - y1;
-    if (nodeWidth <= 0 || nodeHeight <= 0) return;
+
+    // Skip elements with no effective area or if visibility is 'gone' (if available)
+    if (
+      nodeWidth <= 0 ||
+      nodeHeight <= 0 ||
+      node.properties?.visibility === "gone"
+    )
+      return;
+
     const isXWithin = relX >= x1 && relX <= x2;
     const isYWithin = relY >= y1 && relY <= y2;
+
     if (isXWithin && isYWithin) {
       candidatesList.push(node);
+      // Continue searching children even if parent matches, as children might be smaller and more specific
       if (node.children && node.children.length > 0) {
         for (const child of node.children) {
           if (child && typeof child === "object") {
+            // Ensure child is valid
             findAllElementsRecursive(child, relX, relY, candidatesList);
           }
         }
@@ -955,9 +1019,12 @@ document.addEventListener("DOMContentLoaded", function () {
         );
       return null;
     }
+
     const relX = canvasX / overlayCanvas.width;
     const relY = canvasY / overlayCanvas.height;
+
     let hierarchyToSearch = currentHierarchyData;
+    // Ensure root node has valid bounds for searching (default to full screen if missing)
     if (hierarchyToSearch) {
       if (
         !hierarchyToSearch.bounds ||
@@ -970,23 +1037,27 @@ document.addEventListener("DOMContentLoaded", function () {
             `CanvasInteraction DBG: Root node for search ('${hierarchyToSearch.name || "Unnamed Root"}', Key: '${hierarchyToSearch.key || "Unknown Key"}') has invalid/NaN bounds. Applying default [0.0, 0.0, 1.0, 1.0]. Original bounds:`,
             hierarchyToSearch.bounds,
           );
+        // Create a shallow copy and fix bounds rather than modifying original data
         hierarchyToSearch = {
           ...hierarchyToSearch,
           bounds: [0.0, 0.0, 1.0, 1.0],
         };
       }
     } else {
+      // Should not happen if currentHierarchyData is checked above, but as a safeguard:
       if (DEBUG_ELEMENT_FINDING)
         console.error("Logic Error: hierarchyToSearch became null.");
       return null;
     }
+
     const allPotentialMatches = [];
     findAllElementsRecursive(
-      hierarchyToSearch,
+      hierarchyToSearch, // Use the (potentially modified) root node
       relX,
       relY,
       allPotentialMatches,
     );
+
     const bestFound = findBestElementFromCandidates(
       allPotentialMatches,
       relX,
@@ -1007,37 +1078,53 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log(
         `SEARCH: Searching for "${searchTerm}". Found ${allLiElements.length} li elements.`,
       );
+
     if (!searchTerm) {
       allLiElements.forEach((li) => {
-        li.style.display = "";
+        li.style.display = ""; // Show all
+        // Restore original collapsed state if needed (more complex, for now just show)
+        const childUl = li.querySelector("ul");
+        const toggle = li.querySelector(".toggle:not(.spacer)");
+        // This logic is a simple "expand all visible" - could be smarter
+        // if (childUl && childUl.classList.contains('collapsed')) {
+        //     childUl.classList.remove('collapsed');
+        //     if (toggle) toggle.textContent = "▼";
+        // }
       });
       if (selectedNode && selectedNode.key)
+        // Re-scroll to selected if search cleared
         expandAndScrollToNode(selectedNode.key);
       return;
     }
-    allLiElements.forEach((li) => (li.style.display = "none"));
+
+    allLiElements.forEach((li) => (li.style.display = "none")); // Hide all first
     let firstMatchLi = null;
     let matchCount = 0;
+
     for (const key in nodesByKey) {
       const node = nodesByKey[key];
       let isMatch = false;
       const nodeText =
         `${node.name || ""} ${node.properties?.["resource-id"] || ""} ${node.properties?.text || ""} ${node.properties?.["content-desc"] || ""}`.toLowerCase();
+
       if (nodeText.includes(searchTerm)) isMatch = true;
+
       if (isMatch) {
         matchCount++;
         const safeNodeKey = String(node.key).replace(/[^a-zA-Z0-9-_]/g, "_");
         const liElement = document.getElementById(`li-key-${safeNodeKey}`);
         if (liElement) {
           if (!firstMatchLi) firstMatchLi = liElement;
-          liElement.style.display = "";
-          let parentLi = liElement.parentElement?.parentElement;
+          liElement.style.display = ""; // Show the matching LI
+
+          // Expand all parents of the matching LI
+          let parentLi = liElement.parentElement?.parentElement; // li -> ul -> li
           while (
             parentLi &&
             parentLi.tagName === "LI" &&
             parentLi.id.startsWith("li-key-")
           ) {
-            parentLi.style.display = "";
+            parentLi.style.display = ""; // Show parent LI
             const childUl = parentLi.querySelector("ul");
             const toggle = parentLi.querySelector(".toggle:not(.spacer)");
             if (childUl && childUl.classList.contains("collapsed")) {
@@ -1050,7 +1137,8 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
     if (firstMatchLi && searchTerm) {
-      handleTreeSelection(nodesByKey[firstMatchLi.dataset.nodeKey]);
+      // Select and scroll to first match
+      handleTreeSelection(nodesByKey[firstMatchLi.dataset.nodeKey]); // This also calls expandAndScroll
       if (DEBUG_ELEMENT_FINDING)
         console.log(
           `SEARCH: Scrolled to first of ${matchCount} matches: ${firstMatchLi.id}`,
@@ -1067,30 +1155,32 @@ document.addEventListener("DOMContentLoaded", function () {
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       const nodeUnderMouse = findElementAtCanvasCoordinates(x, y);
+
       if (hoveredNode?.key !== nodeUnderMouse?.key) {
         hoveredNode = nodeUnderMouse;
-        drawNodeOverlays();
+        drawNodeOverlays(); // Redraw to update hover highlight
         if (hoveredNode) {
-          displayNodeProperties(hoveredNode);
+          // Do not auto-select on hover, just display properties and tooltip
+          // displayNodeProperties(hoveredNode); // Removed to avoid changing selection on hover
           updateAndShowTooltip(hoveredNode, event.pageX, event.pageY);
         } else {
           hideTooltip();
-          if (selectedNode) displayNodeProperties(selectedNode);
-          else if (elementPropertiesViewEl)
-            elementPropertiesViewEl.innerHTML = "Hover or select an element.";
+          // if (selectedNode) displayNodeProperties(selectedNode); // Keep selected node props if nothing hovered
+          // else if (elementPropertiesViewEl) elementPropertiesViewEl.innerHTML = "Hover or select an element.";
         }
       } else if (hoveredNode && nodeUnderMouse) {
+        // Still under the same node, just update tooltip position
         updateAndShowTooltip(hoveredNode, event.pageX, event.pageY);
       }
     });
     overlayCanvas.addEventListener("mouseleave", function () {
       hideTooltip();
       if (hoveredNode) {
+        // Clear hover state
         hoveredNode = null;
-        drawNodeOverlays();
-        if (selectedNode) displayNodeProperties(selectedNode);
-        else if (elementPropertiesViewEl)
-          elementPropertiesViewEl.innerHTML = "Select an element.";
+        drawNodeOverlays(); // Redraw to remove hover highlight
+        // if (selectedNode) displayNodeProperties(selectedNode); // Keep selected node props
+        // else if (elementPropertiesViewEl) elementPropertiesViewEl.innerHTML = "Select an element.";
       }
     });
     overlayCanvas.addEventListener("click", function (event) {
@@ -1110,34 +1200,43 @@ document.addEventListener("DOMContentLoaded", function () {
         );
       const clickedNode = findElementAtCanvasCoordinates(x, y);
       if (clickedNode) {
-        handleTreeSelection(clickedNode);
-        updateAndShowTooltip(clickedNode, event.pageX, event.pageY);
+        handleTreeSelection(clickedNode); // This now also notifies LLM module
+        updateAndShowTooltip(clickedNode, event.pageX, event.pageY); // Update tooltip for selected
       } else {
+        // Clicked on empty space
         selectedNode = null;
         selectedNodePath = null;
         hideTooltip();
         if (elementPropertiesViewEl)
           elementPropertiesViewEl.innerHTML = "No element selected.";
         if (generatedXpathEl) generatedXpathEl.value = "";
-        drawNodeOverlays();
+        drawNodeOverlays(); // Clear selection highlight
+
         const RTreeEl = hierarchyTreeViewEl.querySelector(
           "li.tree-node-selected",
         );
         if (RTreeEl) RTreeEl.classList.remove("tree-node-selected");
+
         if (DEBUG_ELEMENT_FINDING)
           console.log(
             "CLICK_HANDLER: Clicked on empty space, selection cleared.",
           );
+        // Notify LLM module of cleared selection
+        if (
+          window.LlmAssistantModule &&
+          typeof window.LlmAssistantModule.notifyNodeSelectionChanged ===
+            "function"
+        ) {
+          window.LlmAssistantModule.notifyNodeSelectionChanged(null);
+        }
       }
     });
   }
 
-  // In static/local_inspector.js
-
   async function handleRunPythonCode() {
     const pythonOutputDiv = document.getElementById(
       "interactive-python-output",
-    ); // Renamed for clarity
+    );
     let code = "";
     if (
       window.PythonConsoleManager &&
@@ -1167,15 +1266,14 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    pythonOutputDiv.textContent = "Executing Python code..."; // Clear previous output
-    pythonOutputDiv.style.color = "var(--dark-text-secondary)"; // Default text color
+    pythonOutputDiv.textContent = "Executing Python code...";
+    pythonOutputDiv.style.color = "var(--dark-text-secondary)";
 
     try {
       const responseData = await callBackend(
-        // callBackend is from local_inspector.js
         "POST",
         `/api/android/${currentDeviceSerial}/interactive_python`,
-        { code: code, enable_tracing: false }, // Explicitly set enable_tracing if needed
+        { code: code, enable_tracing: false },
       );
 
       let formattedOutput = "";
@@ -1185,19 +1283,16 @@ document.addEventListener("DOMContentLoaded", function () {
           formattedOutput += responseData.stdout;
         }
 
-        // Display the result of an expression if it's not None/null and not empty
         if (
           responseData.result !== null &&
           responseData.result !== undefined &&
           String(responseData.result).trim() !== ""
         ) {
-          // Add a newline before result if there was stdout, and ensure it's not just "None" from repr(None)
           if (formattedOutput.length > 0 && !formattedOutput.endsWith("\n")) {
             formattedOutput += "\n";
           }
           if (String(responseData.result) !== "None") {
-            // Avoid printing "None" for exec results
-            formattedOutput += `>>> ${responseData.result}\n`; // Mimic REPL output for expressions
+            formattedOutput += `>>> ${responseData.result}\n`;
           }
         }
 
@@ -1206,8 +1301,6 @@ document.addEventListener("DOMContentLoaded", function () {
             formattedOutput += "\n";
           }
           formattedOutput += "--- STDERR ---\n" + responseData.stderr;
-          // Consider changing text color for errors, or using a separate div.
-          // For simplicity here, just appending.
         }
 
         if (
@@ -1219,13 +1312,8 @@ document.addEventListener("DOMContentLoaded", function () {
           }
           formattedOutput +=
             "--- TRACEBACK ---\n" + responseData.execution_error;
-          pythonOutputDiv.style.color = "var(--dark-error)"; // Change color for errors
+          pythonOutputDiv.style.color = "var(--dark-error)";
         }
-
-        // Optional: Display debug_log if you enable tracing and want to see it
-        // if (responseData.debug_log && DEBUG_ELEMENT_FINDING) { // Assuming DEBUG_ELEMENT_FINDING is a global flag
-        //     formattedOutput += "\n--- DEBUG LOG ---\n" + responseData.debug_log;
-        // }
       } else {
         formattedOutput = "# No structured output received from backend.";
       }
@@ -1264,6 +1352,23 @@ document.addEventListener("DOMContentLoaded", function () {
     } catch (e) {
       updateMessage(`Error sending command: ${e.message}`, "error");
     }
+  }
+
+  // Function to provide variables to LLM module
+  function getAppVariablesForLlm() {
+    return {
+      selectedNode: selectedNode
+        ? JSON.parse(JSON.stringify(selectedNode))
+        : null, // Deep copy
+      currentHierarchyData: currentHierarchyData
+        ? JSON.parse(JSON.stringify(currentHierarchyData))
+        : null, // Deep copy
+      currentDeviceSerial: currentDeviceSerial,
+      devices: devices ? JSON.parse(JSON.stringify(devices)) : [], // Deep copy
+      actualDeviceWidth: actualDeviceWidth,
+      actualDeviceHeight: actualDeviceHeight,
+      generatedXpathValue: generatedXpathEl ? generatedXpathEl.value : "",
+    };
   }
 
   function initialize() {
@@ -1312,11 +1417,13 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     window.addEventListener("resize", setupOverlayCanvas);
     if (deviceScreenImg) {
+      // Ensure only one load listener from inspector.js
       if (!deviceScreenImg.onloadAttachedToInspector) {
         deviceScreenImg.addEventListener("load", setupOverlayCanvas);
-        deviceScreenImg.onloadAttachedToInspector = true;
+        deviceScreenImg.onloadAttachedToInspector = true; // Custom flag
       }
     } else console.warn("Init: deviceScreenImg not found");
+
     const localRefreshScreenBtn = document.getElementById("refresh-screen-btn");
     if (localRefreshScreenBtn)
       localRefreshScreenBtn.addEventListener(
@@ -1325,9 +1432,11 @@ document.addEventListener("DOMContentLoaded", function () {
       );
     if (deviceSelect)
       deviceSelect.addEventListener("change", handleDeviceSelectionChange);
+
     const localRunPythonBtn = document.getElementById("run-python-button");
     if (localRunPythonBtn)
       localRunPythonBtn.addEventListener("click", handleRunPythonCode);
+
     const localDeviceHomeBtn = document.getElementById("device-home-btn");
     if (localDeviceHomeBtn)
       localDeviceHomeBtn.addEventListener("click", () =>
@@ -1352,7 +1461,7 @@ document.addEventListener("DOMContentLoaded", function () {
           console.log("REFRESH_ALL_BTN: Manual full refresh triggered.");
         try {
           await fetchAndDisplayScreenshot();
-          await fetchAndRenderHierarchy(true);
+          await fetchAndRenderHierarchy(true); // expandAll = true
           updateMessage("Screen and hierarchy refreshed.", "success");
         } catch (error) {
           console.error("REFRESH_ALL_BTN: Error during manual refresh:", error);
@@ -1367,33 +1476,64 @@ document.addEventListener("DOMContentLoaded", function () {
     } else {
       console.warn("Hierarchy search input not found during initialization.");
     }
+
+    // --- LLM Assistant Module Initialization ---
+    if (
+      window.LlmAssistantModule &&
+      typeof window.LlmAssistantModule.init === "function"
+    ) {
+      console.log("local_inspector.js: Initializing LlmAssistantModule...");
+      window.LlmAssistantModule.init({
+        getAppVariables: getAppVariablesForLlm, // Function to get shared state
+        PythonConsoleManager: window.PythonConsoleManager, // Pass the manager instance
+        updateMessage: updateMessage, // Global update message function
+        callBackend: callBackend, // Global callBackend function
+        escapeHtml: escapeHtml, // Global escapeHtml function
+        openGlobalTab: window.openTab, // The main window.openTab for switching between Hierarchy/Python console
+      });
+    } else {
+      console.error(
+        "LlmAssistantModule is not available at initialize. LLM features will be disabled.",
+      );
+      updateMessage("LLM Assistant module failed to load.", "error", 0);
+    }
+
     console.log(
       "local_inspector.js: Application initialize function completed.",
     );
-  }
+  } // End of initialize function
 
+  // Define window.openTab for main panel tabs (#panel-hierarchy-code)
   if (typeof window.openTab !== "function") {
-    console.log("local_inspector.js: Defining window.openTab");
+    console.log("local_inspector.js: Defining window.openTab for main panels");
     window.openTab = function (evt, tabName) {
-      console.log(`window.openTab called for: ${tabName}`);
+      console.log(`window.openTab (main panel) called for: ${tabName}`);
       let i, tc, tb;
-      tc = document.getElementsByClassName("tab-content");
+      // Tab content within #panel-hierarchy-code
+      tc = document.querySelectorAll("#panel-hierarchy-code > .tab-content");
       for (i = 0; i < tc.length; i++) {
         tc[i].style.display = "none";
         tc[i].classList.remove("active");
       }
-      tb = document.getElementsByClassName("tab-button");
+      // Tab buttons within #panel-hierarchy-code .tabs
+      tb = document.querySelectorAll(
+        "#panel-hierarchy-code > .tabs > .tab-button",
+      );
       for (i = 0; i < tb.length; i++) {
         tb[i].classList.remove("active");
       }
+
       const actTab = document.getElementById(tabName);
       if (actTab) {
-        actTab.style.display = "flex";
+        actTab.style.display = "flex"; // Assuming flex for layout
         actTab.classList.add("active");
       }
+
+      // Activate the button
       if (evt && evt.currentTarget) {
         evt.currentTarget.classList.add("active");
       } else {
+        // Fallback if called without event (e.g. programmatically)
         for (i = 0; i < tb.length; i++) {
           const onC = tb[i].getAttribute("onclick");
           if (
@@ -1406,6 +1546,8 @@ document.addEventListener("DOMContentLoaded", function () {
           }
         }
       }
+
+      // Special handling for hierarchy tab loading
       const hierarchyTabContent = document.getElementById(
         "hierarchy-tab-content",
       );
@@ -1419,9 +1561,10 @@ document.addEventListener("DOMContentLoaded", function () {
           console.log(
             "Inspector tab (hierarchy) opened/focused, fetching hierarchy...",
           );
-        fetchAndRenderHierarchy(true);
+        fetchAndRenderHierarchy(true); // expandAll = true
       }
 
+      // Special handling for Python tab refresh (CodeMirror)
       if (
         actTab &&
         actTab.id === "python-tab-content" &&
@@ -1435,56 +1578,59 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     };
   } else {
-    console.log("local_inspector.js: window.openTab was already defined.");
+    console.log(
+      "local_inspector.js: window.openTab (main panel) was already defined.",
+    );
   }
 
   function initializeDefaultTab() {
-    console.log("local_inspector.js: Initializing default tab...");
-    const defaultTabNameFromHTML = document
-      .querySelector("#panel-hierarchy-code .tab-button.active")
-      ?.getAttribute("onclick")
-      ?.match(/openTab\(event, ['"]([^'"]+)['"]\)/)?.[1];
-    const defaultTabToOpen = defaultTabNameFromHTML || "hierarchy-tab-content";
-    console.log(`Default tab to open: ${defaultTabToOpen}`);
-    const defaultTabButton = Array.from(
-      document.querySelectorAll("#panel-hierarchy-code .tab-button"),
-    ).find((b) => {
-      const o = b.getAttribute("onclick");
-      return (
-        o &&
-        (o.includes("'" + defaultTabToOpen + "'") ||
-          o.includes('"' + defaultTabToOpen + '"'))
-      );
-    });
-    if (defaultTabButton && window.openTab) {
-      console.log("Opening default tab via found button.");
-      window.openTab({ currentTarget: defaultTabButton }, defaultTabToOpen);
-    } else if (window.openTab) {
-      console.log("Default tab button not found, trying first tab in group.");
-      const firstTabInGroup = document.querySelector(
-        "#panel-hierarchy-code .tab-button",
-      );
-      if (firstTabInGroup) {
-        const onclickAttr = firstTabInGroup.getAttribute("onclick");
-        const match = onclickAttr
-          ? onclickAttr.match(/openTab\(event, ['"]([^'"]+)['"]\)/)
-          : null;
-        if (match && match[1]) {
-          window.openTab({ currentTarget: firstTabInGroup }, match[1]);
-        }
-      } else {
-        console.warn("No tab buttons found to initialize a default tab.");
+    console.log(
+      "local_inspector.js: Initializing default tab for main panel (#panel-hierarchy-code)...",
+    );
+    const panelHierarchyCode = document.getElementById("panel-hierarchy-code");
+    if (!panelHierarchyCode) {
+      console.warn("Default tab init: #panel-hierarchy-code not found.");
+      return;
+    }
+
+    // Try to find an already active tab button from HTML or set the first one.
+    let defaultTabButton = panelHierarchyCode.querySelector(
+      ".tabs .tab-button.active",
+    );
+    let defaultTabToOpen;
+
+    if (defaultTabButton) {
+      defaultTabToOpen = defaultTabButton
+        .getAttribute("onclick")
+        ?.match(/openTab\(event, ['"]([^'"]+)['"]\)/)?.[1];
+    } else {
+      defaultTabButton = panelHierarchyCode.querySelector(".tabs .tab-button"); // Get the first button
+      if (defaultTabButton) {
+        defaultTabToOpen = defaultTabButton
+          .getAttribute("onclick")
+          ?.match(/openTab\(event, ['"]([^'"]+)['"]\)/)?.[1];
+        // if (defaultTabToOpen) defaultTabButton.classList.add('active'); // Make it active if not already
       }
+    }
+
+    if (
+      defaultTabButton &&
+      defaultTabToOpen &&
+      typeof window.openTab === "function"
+    ) {
+      console.log(`Default main panel tab to open: ${defaultTabToOpen}`);
+      window.openTab({ currentTarget: defaultTabButton }, defaultTabToOpen);
     } else {
       console.warn(
-        "window.openTab not defined, cannot initialize default tab.",
+        "No tab buttons found or window.openTab not defined for #panel-hierarchy-code, cannot initialize a default tab.",
       );
     }
   }
 
   try {
     initialize();
-    initializeDefaultTab();
+    initializeDefaultTab(); // Initialize default tab for #panel-hierarchy-code
+    // Default tab for #panel-properties is handled by a script in demo.html after LlmAssistantModule loads
     console.log("local_inspector.js: Initialization sequence complete.");
   } catch (e) {
     console.error(
