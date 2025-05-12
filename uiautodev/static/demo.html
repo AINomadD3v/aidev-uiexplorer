@@ -95,9 +95,27 @@
         .properties-panel td { word-break: break-all; color: var(--dark-text-primary); }
         #generated-xpath { width: 100%; padding: 7px; border: 1px solid var(--dark-border-primary); border-radius: 4px; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); font-family: var(--font-family-monospace); margin-top: 5px; font-size: 0.9em; }
 
+        /* LLM Assistant Tab Content & Main Chat Area */
         #llm-assistant-tab-content { display: flex; flex-direction: column; overflow: hidden; }
-        #llm-assistant-tab-content .panel-body-llm { display: flex; flex-direction: row; gap: 5px; padding: 5px; flex-grow: 1; overflow: hidden; background-color: var(--dark-bg-secondary); }
-        .llm-chat-main { flex-grow: 1; display: flex; flex-direction: column; background-color: var(--dark-bg-primary); border-radius: 3px; overflow:hidden; border: 1px solid var(--dark-border-primary); min-width: 0; }
+        #llm-assistant-tab-content .panel-body-llm {
+            display: flex;
+            /* Changed to column as sidebar is removed */
+            flex-direction: column; 
+            padding: 5px; /* Keep padding for the overall body */
+            flex-grow: 1; 
+            overflow: hidden; 
+            background-color: var(--dark-bg-secondary);
+        }
+        .llm-chat-main { 
+            flex-grow: 1; 
+            display: flex; 
+            flex-direction: column; 
+            background-color: var(--dark-bg-primary); 
+            border-radius: 3px; 
+            overflow:hidden; /* Children will manage scroll */
+            border: 1px solid var(--dark-border-primary); 
+            min-width: 0; /* Important for flex children */
+        }
         #llm-chat-history { flex-grow: 1; padding: 10px; overflow-y: auto; font-size: 0.9em; line-height: 1.5; color: var(--dark-text-primary); }
         .llm-message { margin-bottom: 10px; padding: 8px 12px; border-radius: 6px; max-width: 90%; word-wrap: break-word; clear: both; }
         .llm-message-user { background-color: var(--dark-accent-primary); color: white; margin-left: auto; float: right; text-align: left; }
@@ -109,20 +127,90 @@
         .llm-message pre:hover .llm-code-action-buttons { opacity: 1; }
         .llm-code-copy-btn, .llm-code-insert-btn { background-color: var(--dark-bg-hover); color: var(--dark-text-secondary); border: 1px solid var(--dark-border-secondary); border-radius: 3px; padding: 3px 7px; font-size: 0.75em; cursor: pointer; }
         .llm-code-copy-btn:hover, .llm-code-insert-btn:hover { background-color: var(--dark-accent-hover); color: white; }
-        .llm-prompt-area { padding: 8px; border-top: 1px solid var(--dark-border-primary); display: flex; gap: 8px; background-color: var(--dark-bg-secondary); align-items: flex-end; flex-shrink: 0; }
-        #llm-prompt-input { background-color: var(--dark-bg-primary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; padding: 8px; font-family: var(--font-family-main); font-size: 0.9em; flex-grow: 1; resize: none; min-height: 38px; max-height: 120px; overflow-y: auto; }
-        #llm-send-prompt-btn { padding: 0 12px; font-size: 1.2em; line-height: 36px; border: 1px solid var(--dark-border-primary); background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border-radius: 4px; cursor: pointer; align-self: flex-end; height: 38px; width: 40px; text-align: center; }
-        #llm-send-prompt-btn:hover { background-color: var(--dark-accent-hover); color: white; }
-        .llm-context-sidebar { flex: 0 0 230px; padding: 10px; background-color: var(--dark-bg-tertiary); border-radius: 3px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; border-left: 1px solid var(--dark-border-primary); min-width: 200px; }
-        .llm-context-sidebar h5 { margin: 0 0 8px 0; color: var(--dark-text-secondary); font-size: 0.9em; border-bottom: 1px solid var(--dark-border-secondary); padding-bottom: 6px; font-weight: 500; }
+        
+        /* LLM Context Controls Area (New) */
+        .llm-context-controls-area {
+            position: relative; /* Context for the upward panel */
+            padding: 0 8px;    
+            flex-shrink: 0; /* Prevent shrinking */
+        }
+        .llm-context-actions-bar {
+            display: flex;
+            justify-content: flex-start; 
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0; 
+            border-top: 1px solid var(--dark-border-primary); /* Separator from chat history */
+        }
+        .llm-context-toggle-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background-color: var(--dark-bg-tertiary); 
+            border: 1px solid var(--dark-border-primary);
+        }
+        .llm-context-toggle-btn:hover {
+            background-color: var(--dark-bg-hover);
+        }
+        .llm-context-toggle-icon {
+            font-size: 0.8em; 
+            color: var(--dark-text-placeholder);
+            transition: transform 0.2s ease-in-out;
+            display: inline-block; 
+        }
+        .llm-context-toggle-btn.open .llm-context-toggle-icon {
+            transform: rotate(180deg); 
+        }
+        #llm-clear-conversation-btn.small-button { /* Ensure specificity if needed */
+            background-color: var(--dark-bg-tertiary); 
+            border: 1px solid var(--dark-border-primary);
+            color: var(--dark-text-primary);
+        }
+        #llm-clear-conversation-btn.small-button:hover {
+             background-color: var(--dark-error);
+             border-color: var(--dark-error); 
+             color: white;
+        }
+        .llm-context-panel-upwards {
+            position: absolute;
+            bottom: calc(100% + 0px); /* Position above the actions bar */
+            left: 8px; 
+            width: calc(100% - 16px); /* Take full width minus padding */
+            background-color: var(--dark-bg-secondary);
+            border: 1px solid var(--dark-border-primary);
+            border-bottom: none; 
+            border-radius: 4px 4px 0 0; 
+            box-shadow: 0 -3px 8px rgba(0,0,0,0.3);
+            z-index: 200; 
+            
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden; 
+            padding: 0 10px; /* No vertical padding when collapsed */
+            transition: max-height 0.25s ease-out, opacity 0.2s ease-out, padding 0.25s ease-out;
+        }
+        .llm-context-panel-upwards:not(.collapsed) {
+            max-height: 220px; /* Max height for the panel when open */
+            opacity: 1;
+            overflow-y: auto; 
+            padding: 10px; /* Restore padding when open */
+        }
         .llm-context-item { display: flex; align-items: center; font-size: 0.85em; color: var(--dark-text-secondary); padding: 6px 4px; border-radius: 3px; transition: background-color 0.2s; }
         .llm-context-item label { cursor: pointer; display: flex; align-items: center; width: 100%; }
         .llm-context-item:hover { background-color: var(--dark-bg-hover); }
         .llm-context-item input[type="checkbox"] { margin-right: 8px; accent-color: var(--dark-accent-primary); transform: scale(0.9); cursor: pointer; }
         .llm-context-item select { margin-left: auto; font-size: 0.9em; padding: 2px 4px; background-color: var(--dark-bg-primary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-secondary); border-radius: 3px; max-width: 100px; }
-        #llm-clear-conversation-btn { width: 100%; padding: 7px 10px; font-size: 0.85em; border: 1px solid var(--dark-border-primary); background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border-radius: 4px; cursor: pointer; margin-top: auto; }
-        #llm-clear-conversation-btn:hover { background-color: var(--dark-error); border-color: var(--dark-error); color: white; }
+        
+        .llm-prompt-area { padding: 8px; border-top: 1px solid var(--dark-border-primary); display: flex; gap: 8px; background-color: var(--dark-bg-secondary); align-items: flex-end; flex-shrink: 0; }
+        #llm-prompt-input { background-color: var(--dark-bg-primary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; padding: 8px; font-family: var(--font-family-main); font-size: 0.9em; flex-grow: 1; resize: none; min-height: 38px; max-height: 120px; overflow-y: auto; }
+        #llm-send-prompt-btn { padding: 0 12px; font-size: 1.2em; line-height: 36px; border: 1px solid var(--dark-border-primary); background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border-radius: 4px; cursor: pointer; align-self: flex-end; height: 38px; width: 40px; text-align: center; }
+        #llm-send-prompt-btn:hover { background-color: var(--dark-accent-hover); color: white; }
         .small-button { padding: 5px 8px; font-size: 0.85em; }
+
 
         .tab-panel-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--dark-border-secondary); font-size: 0.95em; color: var(--dark-text-secondary); font-weight: 500; flex-shrink: 0; }
         #hierarchy-tab-content { padding: 10px; }
@@ -312,37 +400,43 @@
                 <div class="panel-body-llm">
                     <div class="llm-chat-main">
                         <div id="llm-chat-history"></div>
+                        <div class="llm-context-controls-area">
+                            <div class="llm-context-actions-bar">
+                                <button id="attach-context-toggle-btn" class="llm-context-toggle-btn small-button">
+                                    <span class="llm-context-toggle-icon">▲</span> Context
+                                </button>
+                                <button id="llm-clear-conversation-btn" class="small-button">Clear Chat</button>
+                            </div>
+                            <div id="attach-context-panel" class="llm-context-panel-upwards collapsed">
+                                <label class="llm-context-item">
+                                    <input type="checkbox" id="llm-context-ui-hierarchy" data-context-key="uiHierarchy"> Current UI Hierarchy
+                                </label>
+                                <label class="llm-context-item">
+                                    <input type="checkbox" id="llm-context-selected-element" data-context-key="selectedElement" checked> Selected Element
+                                </label>
+                                <label class="llm-context-item">
+                                    <input type="checkbox" id="llm-context-python-console-output" data-context-key="pythonConsoleOutput"> Python Console
+                                    <select id="llm-context-python-console-output-lines">
+                                        <option value="lastError">Last Error</option>
+                                        <option value="5" selected>Last 5</option>
+                                        <option value="10">Last 10</option>
+                                        <option value="all">All</option>
+                                    </select>
+                                </label>
+                                <label class="llm-context-item">
+                                    <input type="checkbox" id="llm-context-python-code" data-context-key="pythonCode"> Python Code
+                                </label>
+                                <label class="llm-context-item">
+                                    <input type="checkbox" id="llm-context-device-info" data-context-key="deviceInfo"> Device Info
+                                </label>
+                            </div>
+                        </div>
                         <div class="llm-prompt-area">
                             <textarea id="llm-prompt-input" placeholder="Type your message..." rows="1"></textarea>
                             <button id="llm-send-prompt-btn" title="Send Message">➤</button>
                         </div>
                     </div>
-                    <div class="llm-context-sidebar">
-                        <h5>Attach Context:</h5>
-                        <label class="llm-context-item">
-                            <input type="checkbox" id="llm-context-ui-hierarchy" data-context-key="uiHierarchy"> Current UI Hierarchy
-                        </label>
-                        <label class="llm-context-item">
-                            <input type="checkbox" id="llm-context-selected-element" data-context-key="selectedElement" checked> Selected Element
-                        </label>
-                        <label class="llm-context-item">
-                            <input type="checkbox" id="llm-context-python-console-output" data-context-key="pythonConsoleOutput"> Python Console
-                            <select id="llm-context-python-console-output-lines">
-                                <option value="lastError">Last Error</option>
-                                <option value="5" selected>Last 5</option>
-                                <option value="10">Last 10</option>
-                                <option value="all">All</option>
-                            </select>
-                        </label>
-                        <label class="llm-context-item">
-                            <input type="checkbox" id="llm-context-python-code" data-context-key="pythonCode"> Python Code
-                        </label>
-                        <label class="llm-context-item">
-                            <input type="checkbox" id="llm-context-device-info" data-context-key="deviceInfo"> Device Info
-                        </label>
-                        <button id="llm-clear-conversation-btn" class="small-button">Clear Chat & Context</button>
                     </div>
-                </div>
             </div>
 
             <div id="element-details-tab-content" class="tab-content">
@@ -427,8 +521,7 @@
                     console.warn("DEMO_HTML_LOG: window.openPropertiesTab is not defined. Properties panel default tab not set by demo.html script.");
                 }
             }
-
-            setTimeout(initializePropertiesPanelDefaultTab, 100); // Small delay for other scripts to load
+            setTimeout(initializePropertiesPanelDefaultTab, 100);
 
             function setupPythonConsoleResizer() {
                 const pythonTabContent = document.getElementById('python-tab-content');
@@ -539,6 +632,42 @@
                 });
             }
             setupPythonConsoleResizer();
+
+            // --- Attach Context Toggle (New Inline JS) ---
+            function setupAttachContextToggleNew() {
+                const contextToggleButton = document.getElementById('attach-context-toggle-btn');
+                const contextPanelUpwards = document.getElementById('attach-context-panel');
+
+                if (contextToggleButton && contextPanelUpwards) {
+                    // Ensure it starts collapsed as per HTML
+                    if (contextPanelUpwards.classList.contains('collapsed')) {
+                        contextToggleButton.classList.remove('open');
+                    } else {
+                        contextToggleButton.classList.add('open');
+                    }
+
+                    contextToggleButton.addEventListener('click', (event) => {
+                        event.stopPropagation(); 
+                        const isCurrentlyCollapsed = contextPanelUpwards.classList.contains('collapsed');
+                        contextPanelUpwards.classList.toggle('collapsed');
+                        contextToggleButton.classList.toggle('open', isCurrentlyCollapsed);
+                    });
+
+                    document.addEventListener('click', function(event) {
+                        if (!contextPanelUpwards.classList.contains('collapsed')) { // Only if panel is open
+                            const isClickInsidePanel = contextPanelUpwards.contains(event.target);
+                            const isClickOnToggleButton = contextToggleButton.contains(event.target);
+                            if (!isClickInsidePanel && !isClickOnToggleButton) {
+                                contextPanelUpwards.classList.add('collapsed');
+                                contextToggleButton.classList.remove('open');
+                            }
+                        }
+                    });
+                } else {
+                    console.warn("LLM Assistant: New Attach Context toggle elements not found for inline setup.");
+                }
+            }
+            setupAttachContextToggleNew(); 
         });
     </script>
     <style>
