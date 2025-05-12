@@ -1,41 +1,48 @@
 // static/llm_assistant_module.js
-console.log("llm_assistant_module.js: Loaded");
+console.log("LLM_MOD_LOG: llm_assistant_module.js script started loading.");
 
-const LlmAssistantModule = (function () {
+window.LlmAssistantModule = (function () {
+  console.log("LLM_MOD_LOG: LlmAssistantModule IIFE invoked.");
   // --- Private Variables ---
   let llmConversationHistory = [];
   let dependencies = {
-    getAppVariables: () => ({
-      selectedNode: null,
-      currentHierarchyData: null,
-      currentDeviceSerial: null,
-      devices: [],
-      actualDeviceWidth: null,
-      actualDeviceHeight: null,
-      generatedXpathValue: "",
-    }),
+    getAppVariables: () => {
+      return {
+        selectedNode: null,
+        currentHierarchyData: null,
+        currentDeviceSerial: null,
+        devices: [],
+        actualDeviceWidth: null,
+        actualDeviceHeight: null,
+        generatedXpathValue: "",
+      };
+    },
     PythonConsoleManager: null,
-    updateMessage: (text, type, duration) =>
-      console.log(`LLM_UpdateMessage: ${type} - ${text}`),
+    updateMessage: (text, type, duration) => {
+      console.log(
+        `LLM_MOD_LOG: updateMessage dependency called with: ${type} - ${text}`,
+      );
+    },
     callBackend: async (method, endpoint, body) => {
-      // This will NOT be used for the streaming chat call
-      console.warn("LLM_callBackend used for non-streaming or fallback.");
-      // Original implementation of callBackend is assumed to be passed via initDeps
-      // and would handle non-streaming API calls if any were needed by this module.
-      // For the streaming chat, we'll use fetch directly.
+      console.warn(
+        "LLM_MOD_LOG: LLM_callBackend dependency used for non-streaming or fallback.",
+      );
       throw new Error(
         "callBackend fallback not fully implemented here if needed by LLM module directly.",
       );
     },
     escapeHtml: (s) =>
-      s
+      String(s)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;"),
-    openGlobalTab: (evt, tabName) =>
-      console.log(`LLM_openGlobalTab for ${tabName}`),
+    openGlobalTab: (evt, tabName) => {
+      console.log(
+        `LLM_MOD_LOG: openGlobalTab dependency called for ${tabName}`,
+      );
+    },
   };
 
   // DOM Elements
@@ -53,38 +60,90 @@ const LlmAssistantModule = (function () {
   // --- Private Functions ---
 
   function _fetchLlmDomElements() {
+    console.log("LLM_MOD_LOG: _fetchLlmDomElements() called.");
+    let allCriticalFound = true;
+
     llmChatHistoryEl = document.getElementById("llm-chat-history");
+    if (!llmChatHistoryEl) {
+      console.error("LLM_MOD_LOG: 'llm-chat-history' NOT FOUND!");
+      allCriticalFound = false;
+    } else {
+      console.log("LLM_MOD_LOG: 'llm-chat-history' found.");
+    }
+
     llmPromptInputEl = document.getElementById("llm-prompt-input");
+    if (!llmPromptInputEl) {
+      console.error("LLM_MOD_LOG: 'llm-prompt-input' NOT FOUND!");
+      allCriticalFound = false;
+    } else {
+      console.log("LLM_MOD_LOG: 'llm-prompt-input' found.");
+    }
+
     llmSendPromptBtn = document.getElementById("llm-send-prompt-btn");
+    if (!llmSendPromptBtn) {
+      console.error("LLM_MOD_LOG: 'llm-send-prompt-btn' NOT FOUND!");
+      allCriticalFound = false;
+    } else {
+      console.log("LLM_MOD_LOG: 'llm-send-prompt-btn' found.");
+    }
+
     llmClearConversationBtn = document.getElementById(
       "llm-clear-conversation-btn",
     );
+    if (!llmClearConversationBtn) {
+      console.error("LLM_MOD_LOG: 'llm-clear-conversation-btn' NOT FOUND!");
+      allCriticalFound = false;
+    } else {
+      console.log("LLM_MOD_LOG: 'llm-clear-conversation-btn' found.");
+    }
+
     llmContextUiHierarchyCheckbox = document.getElementById(
       "llm-context-ui-hierarchy",
     );
+    if (!llmContextUiHierarchyCheckbox)
+      console.warn(
+        "LLM_MOD_LOG: Optional 'llm-context-ui-hierarchy' not found.",
+      );
     llmContextSelectedElementCheckbox = document.getElementById(
       "llm-context-selected-element",
     );
+    if (!llmContextSelectedElementCheckbox)
+      console.warn(
+        "LLM_MOD_LOG: Optional 'llm-context-selected-element' not found.",
+      );
     llmContextPythonConsoleOutputCheckbox = document.getElementById(
       "llm-context-python-console-output",
     );
+    if (!llmContextPythonConsoleOutputCheckbox)
+      console.warn(
+        "LLM_MOD_LOG: Optional 'llm-context-python-console-output' not found.",
+      );
     llmContextPythonConsoleOutputLinesSelect = document.getElementById(
       "llm-context-python-console-output-lines",
     );
+    if (!llmContextPythonConsoleOutputLinesSelect)
+      console.warn(
+        "LLM_MOD_LOG: Optional 'llm-context-python-console-output-lines' not found.",
+      );
     llmContextPythonCodeCheckbox = document.getElementById(
       "llm-context-python-code",
     );
+    if (!llmContextPythonCodeCheckbox)
+      console.warn(
+        "LLM_MOD_LOG: Optional 'llm-context-python-code' not found.",
+      );
     llmContextDeviceInfoCheckbox = document.getElementById(
       "llm-context-device-info",
     );
+    if (!llmContextDeviceInfoCheckbox)
+      console.warn(
+        "LLM_MOD_LOG: Optional 'llm-context-device-info' not found.",
+      );
 
-    if (
-      !llmChatHistoryEl ||
-      !llmPromptInputEl ||
-      !llmSendPromptBtn ||
-      !llmClearConversationBtn
-    ) {
-      console.error("LLM_MODULE: Critical LLM chat UI elements not found!");
+    if (!allCriticalFound) {
+      console.error(
+        "LLM_MOD_LOG: At least one CRITICAL LLM chat UI element was NOT found!",
+      );
       dependencies.updateMessage(
         "LLM Chat UI failed to load critical elements.",
         "error",
@@ -92,26 +151,24 @@ const LlmAssistantModule = (function () {
       );
       return false;
     }
+    console.log(
+      "LLM_MOD_LOG: _fetchLlmDomElements() finished. All critical elements reported found.",
+    );
     return true;
   }
 
   function _formatResponseForDisplay(rawText) {
-    // Ensure code blocks are formatted correctly.
-    // This regex handles various languages and ensures ``` is on its own line or start/end of content.
-    let html = rawText.replace(
+    let escapedText = dependencies.escapeHtml(rawText);
+    let html = escapedText.replace(
       /```(\w*)\n?([\s\S]*?)\n?```/g,
       (match, lang, code) => {
-        const languageClass = lang ? `language-${lang.trim()}` : "";
-        // Trim trailing newline from code block if present, as <pre> handles it
-        const trimmedCode = code.replace(/\n$/, "");
-        return `<pre><code class="${languageClass}">${dependencies.escapeHtml(trimmedCode)}</code></pre>`;
+        const languageClass = lang ? `language-${lang}` : "language-plaintext";
+        return `<pre><code class="${languageClass}">${code}</code></pre>`;
       },
     );
-    // Convert other newlines to <br>, but not those inside <pre>
-    // This is tricky. A common approach is to split by <pre> blocks, process, then rejoin.
     const parts = html.split(/(<pre(?:.|\n)*?<\/pre>)/);
     for (let i = 0; i < parts.length; i++) {
-      if (!parts[i].startsWith("<pre")) {
+      if (i % 2 === 0) {
         parts[i] = parts[i].replace(/\n/g, "<br>");
       }
     }
@@ -125,51 +182,48 @@ const LlmAssistantModule = (function () {
     isHtml = false,
     isStreaming = false,
   ) {
-    if (!llmChatHistoryEl) return null;
-
+    if (!llmChatHistoryEl) {
+      console.error(
+        "LLM_MOD_LOG: _addMessageToChatHistory - llmChatHistoryEl is null!",
+      );
+      return null;
+    }
     const messageDiv = document.createElement("div");
     messageDiv.classList.add("llm-message", `llm-message-${type}`);
-
-    // Store raw content for streaming updates
     messageDiv.dataset.rawContent = isStreaming
       ? initialContent
       : isHtml
-        ? "HTML_NO_RAW"
+        ? "HTML_CONTENT_NO_RAW"
         : initialContent;
 
-    if (isHtml || isStreaming) {
-      // For streaming, initial content might be "Thinking..." or empty, then updated
-      messageDiv.innerHTML = isStreaming
-        ? _formatResponseForDisplay(initialContent)
-        : initialContent;
+    if (isHtml) {
+      messageDiv.innerHTML = initialContent;
     } else {
-      const p = document.createElement("p");
-      p.textContent = initialContent;
-      messageDiv.appendChild(p);
+      messageDiv.innerHTML = _formatResponseForDisplay(initialContent);
     }
 
     llmChatHistoryEl.appendChild(messageDiv);
     llmChatHistoryEl.scrollTop = llmChatHistoryEl.scrollHeight;
 
-    // Code block buttons will be added by _updateStreamedMessage or after full non-streamed message
-    if (type === "assistant" && (isHtml || isStreaming)) {
+    if (type === "assistant") {
       _addCodeActionButtonsToMessage(messageDiv);
     }
-    return messageDiv; // Return the created div for potential stream updates
+    return messageDiv;
   }
 
   function _addCodeActionButtonsToMessage(messageDiv) {
-    if (!messageDiv) return;
-    // Remove existing buttons to prevent duplication during stream updates
+    if (
+      !messageDiv ||
+      !dependencies.PythonConsoleManager ||
+      typeof dependencies.PythonConsoleManager.setCode !== "function"
+    ) {
+      return;
+    }
     messageDiv
       .querySelectorAll(".llm-code-action-buttons")
       .forEach((btnContainer) => btnContainer.remove());
-
     const preElements = messageDiv.querySelectorAll("pre");
     preElements.forEach((preElement) => {
-      // Ensure pre isn't already processed by checking for existing button container
-      if (preElement.querySelector(".llm-code-action-buttons")) return;
-
       const codeElement = preElement.querySelector("code");
       const codeText = codeElement
         ? codeElement.textContent
@@ -178,133 +232,137 @@ const LlmAssistantModule = (function () {
       const buttonsContainer = document.createElement("div");
       buttonsContainer.className = "llm-code-action-buttons";
 
-      const copyBtn = document.createElement("button");
-      copyBtn.textContent = "Copy";
-      copyBtn.className = "llm-code-copy-btn";
-      copyBtn.title = "Copy code to clipboard";
-      copyBtn.onclick = (e) => {
+      const copyButton = document.createElement("button");
+      copyButton.textContent = "Copy";
+      copyButton.className = "llm-code-copy-btn";
+      copyButton.title = "Copy code to clipboard";
+      copyButton.addEventListener("click", (e) => {
         e.stopPropagation();
         navigator.clipboard
           .writeText(codeText)
-          .then(() =>
-            dependencies.updateMessage("Code copied!", "success", 1500),
-          )
-          .catch((err) =>
-            dependencies.updateMessage("Failed to copy code.", "error", 3000),
-          );
-      };
-      buttonsContainer.appendChild(copyBtn);
+          .then(() => {
+            dependencies.updateMessage("Code copied!", "success", 1500);
+            copyButton.textContent = "Copied!";
+            setTimeout(() => {
+              copyButton.textContent = "Copy";
+            }, 1500);
+          })
+          .catch((err) => {
+            console.error("LLM_MOD_LOG: Failed to copy code:", err);
+            dependencies.updateMessage("Failed to copy.", "error");
+          });
+      });
 
-      const insertBtn = document.createElement("button");
-      insertBtn.textContent = "Insert";
-      insertBtn.className = "llm-code-insert-btn";
-      insertBtn.title = "Insert code into Python Console";
-      insertBtn.onclick = (e) => {
+      const insertButton = document.createElement("button");
+      insertButton.textContent = "To Console";
+      insertButton.className = "llm-code-insert-btn";
+      insertButton.title = "Insert code into Python Console";
+      insertButton.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (
-          dependencies.PythonConsoleManager &&
-          typeof dependencies.PythonConsoleManager.setCode === "function"
-        ) {
-          dependencies.PythonConsoleManager.setCode(codeText);
-          dependencies.updateMessage(
-            "Code inserted into Python Console!",
-            "success",
-            2000,
-          );
-          if (typeof dependencies.openGlobalTab === "function") {
-            const pythonTabButton = Array.from(
-              document.querySelectorAll("#panel-hierarchy-code .tab-button"),
-            ).find((btn) =>
-              btn.getAttribute("onclick")?.includes("python-tab-content"),
-            );
-            if (pythonTabButton) {
-              dependencies.openGlobalTab(
-                { currentTarget: pythonTabButton },
-                "python-tab-content",
-              );
-            }
-          }
-        } else {
-          dependencies.updateMessage(
-            "Python Console Manager not available.",
-            "error",
-            3000,
-          );
+        dependencies.PythonConsoleManager.setCode(codeText);
+        dependencies.updateMessage(
+          "Code inserted into Python console.",
+          "success",
+          2000,
+        );
+        if (dependencies.openGlobalTab) {
+          dependencies.openGlobalTab(null, "python-tab-content");
         }
-      };
-      buttonsContainer.appendChild(insertBtn);
+      });
+
+      buttonsContainer.appendChild(copyButton);
+      buttonsContainer.appendChild(insertButton);
+      preElement.style.position = "relative";
       preElement.appendChild(buttonsContainer);
     });
   }
 
   function _updateStreamedMessage(messageDiv, newChunk, isComplete = false) {
     if (!messageDiv) return;
-
-    // Append new chunk to raw content
     messageDiv.dataset.rawContent += newChunk;
-
-    // Re-render the entire message content with formatting
     messageDiv.innerHTML = _formatResponseForDisplay(
       messageDiv.dataset.rawContent,
     );
-
-    // Re-attach code action buttons after innerHTML is overwritten
-    _addCodeActionButtonsToMessage(messageDiv);
-
-    llmChatHistoryEl.scrollTop = llmChatHistoryEl.scrollHeight; // Scroll to bottom
-
-    if (isComplete) {
-      // Any final processing after stream is complete
-      // For example, explicitly save to conversation history if not done elsewhere
+    if (llmChatHistoryEl) {
+      llmChatHistoryEl.scrollTop = llmChatHistoryEl.scrollHeight;
     }
+    _addCodeActionButtonsToMessage(messageDiv);
   }
 
   function _clearLlmChat() {
+    console.log("LLM_MOD_LOG: _clearLlmChat() called.");
     if (llmChatHistoryEl) llmChatHistoryEl.innerHTML = "";
     llmConversationHistory = [];
     _addMessageToChatHistory(
       "Chat cleared. How can I help you next?",
       "assistant",
-      false,
     );
     dependencies.updateMessage("Chat conversation cleared.", "info");
+    console.log("LLM_MOD_LOG: _clearLlmChat() finished.");
   }
 
   async function _handleSendLlmPrompt() {
-    if (!llmPromptInputEl || !llmSendPromptBtn) return;
-    const promptText = llmPromptInputEl.value.trim();
-    if (!promptText) {
-      dependencies.updateMessage(
-        "Please enter a message for the assistant.",
-        "warning",
+    console.log(
+      "LLM_MOD_LOG: _handleSendLlmPrompt() CALLED. This is the click handler.",
+    );
+    if (!llmPromptInputEl || !llmSendPromptBtn) {
+      console.error(
+        "LLM_MOD_LOG: _handleSendLlmPrompt - Critical UI elements missing.",
       );
       return;
     }
 
-    _addMessageToChatHistory(dependencies.escapeHtml(promptText), "user");
+    const promptText = llmPromptInputEl.value.trim();
+    console.log(
+      "LLM_MOD_LOG: _handleSendLlmPrompt - Prompt text from input: '",
+      promptText + "'",
+    );
+    if (!promptText) {
+      dependencies.updateMessage(
+        "Please enter a message for the assistant.",
+        "warning",
+        2000,
+      );
+      console.warn(
+        "LLM_MOD_LOG: _handleSendLlmPrompt - Prompt text is empty. Aborting.",
+      );
+      return;
+    }
+
+    _addMessageToChatHistory(promptText, "user");
     llmConversationHistory.push({ role: "user", content: promptText });
+
     llmPromptInputEl.value = "";
     llmPromptInputEl.style.height = "auto";
     llmPromptInputEl.disabled = true;
     llmSendPromptBtn.disabled = true;
 
-    const context = _getSelectedLlmContext();
+    const context = _getSelectedLlmContext(); // This function now has more logging
+    console.log(
+      "LLM_MOD_LOG: _handleSendLlmPrompt - Context data for payload:",
+      JSON.stringify(context).substring(0, 500) + "...",
+    );
     const payload = {
       prompt: promptText,
       context: context,
-      // Send recent history, e.g., last 6 messages (3 user, 3 assistant) + system prompt handled by backend
-      history: llmConversationHistory.slice(-7, -1), // Exclude current user prompt, already in payload.prompt
+      history: llmConversationHistory.slice(-7, -1),
     };
+    console.log(
+      "LLM_MOD_LOG: _handleSendLlmPrompt - Payload for API:",
+      JSON.stringify(payload),
+    );
 
-    // Create an empty container for the assistant's streamed response
     const assistantMessageDiv = _addMessageToChatHistory(
       "<i>Assistant is thinking...</i>",
       "assistant",
       true,
       true,
     );
-    let accumulatedResponse = ""; // To store the full raw text for history
+    let accumulatedResponse = "";
 
+    console.log(
+      "LLM_MOD_LOG: _handleSendLlmPrompt - Attempting fetch to /api/llm/chat",
+    );
     try {
       const response = await fetch("/api/llm/chat", {
         method: "POST",
@@ -314,152 +372,206 @@ const LlmAssistantModule = (function () {
         },
         body: JSON.stringify(payload),
       });
+      console.log(
+        "LLM_MOD_LOG: _handleSendLlmPrompt - Fetch response status:",
+        response.status,
+      );
 
       if (!response.ok) {
-        // Try to parse error from backend if JSON, otherwise use status text
         let errorDetail = `HTTP error ${response.status}: ${response.statusText}`;
         try {
           const errorJson = await response.json();
           errorDetail = errorJson.detail || errorJson.error || errorDetail;
         } catch (e) {
-          /* Ignore if not JSON */
+          /* ignore */
         }
+        console.error(
+          "LLM_MOD_LOG: _handleSendLlmPrompt - Fetch not OK:",
+          errorDetail,
+        );
         throw new Error(errorDetail);
       }
-
       if (!response.body) {
+        console.error(
+          "LLM_MOD_LOG: _handleSendLlmPrompt - Response body is null.",
+        );
         throw new Error("Response body is null, cannot read stream.");
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = ""; // To handle partial SSE messages
+      let buffer = "";
+      let streamShouldEnd = false;
 
-      // Clear "Thinking..." and prepare for actual content
+      console.log(
+        "LLM_MOD_LOG: _handleSendLlmPrompt - Starting to read stream.",
+      );
       if (assistantMessageDiv) {
-        assistantMessageDiv.dataset.rawContent = ""; // Reset raw content
-        assistantMessageDiv.innerHTML = ""; // Clear "Thinking..."
+        assistantMessageDiv.dataset.rawContent = "";
+        assistantMessageDiv.innerHTML = "";
       }
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) {
-          _updateStreamedMessage(assistantMessageDiv, "", true); // Final update, ensures buttons if any
-          break;
+          console.log(
+            "LLM_MOD_LOG: _handleSendLlmPrompt - Stream reader 'done'.",
+          );
+          _updateStreamedMessage(assistantMessageDiv, "", true);
+          streamShouldEnd = true;
+        } else {
+          buffer += decoder.decode(value, { stream: true });
         }
 
-        buffer += decoder.decode(value, { stream: true });
         let eolIndex;
-
-        // Process complete SSE messages (lines ending in \n\n)
         while ((eolIndex = buffer.indexOf("\n\n")) >= 0) {
           const sseMessage = buffer.slice(0, eolIndex);
-          buffer = buffer.slice(eolIndex + 2); // Consume the message and the two newlines
-
-          let eventType = "message"; // Default SSE event type
+          buffer = buffer.slice(eolIndex + 2);
+          let currentEventType = "message";
           let dataContent = "";
 
           sseMessage.split("\n").forEach((line) => {
-            if (line.startsWith("event: ")) {
-              eventType = line.substring("event: ".length).trim();
-            } else if (line.startsWith("data: ")) {
-              // Data can span multiple "data:" lines, but our backend sends one JSON string per data.
-              // For simplicity, we assume one data line here as per our backend's current yield.
-              dataContent = line.substring("data: ".length).trim();
+            if (line.startsWith("event:")) {
+              currentEventType = line.substring("event:".length).trim();
+            } else if (line.startsWith("data:")) {
+              dataContent = line.substring("data:".length).trim();
             }
           });
 
           if (dataContent) {
             try {
-              const parsedData = JSON.parse(dataContent); // Backend sends JSON string: "chunk"
-
-              if (eventType === "error") {
-                console.error("Stream error event:", parsedData.error);
-                accumulatedResponse += `\n\n**Error from LLM:** ${parsedData.error}`;
-                _updateStreamedMessage(
-                  assistantMessageDiv,
-                  `\n\n**Error from LLM:** ${dependencies.escapeHtml(parsedData.error)}`,
+              const parsedData = JSON.parse(dataContent);
+              if (currentEventType === "error") {
+                console.error(
+                  "LLM_MOD_LOG: SSE Event 'error':",
+                  parsedData.error,
                 );
-                // Potentially stop processing further if it's a fatal error
-                break; // Break from while ((eolIndex... loop
-              } else if (eventType === "message") {
+                const errorChunk = `\n[Stream Error: ${dependencies.escapeHtml(parsedData.error)}]`;
+                accumulatedResponse += errorChunk;
+                _updateStreamedMessage(assistantMessageDiv, errorChunk);
+                dependencies.updateMessage(
+                  `LLM Error: ${parsedData.error}`,
+                  "error",
+                );
+                streamShouldEnd = true;
+                break;
+              } else if (
+                currentEventType === "message" ||
+                currentEventType === "data"
+              ) {
                 const textChunk =
                   typeof parsedData === "string"
                     ? parsedData
                     : parsedData.content || "";
                 accumulatedResponse += textChunk;
                 _updateStreamedMessage(assistantMessageDiv, textChunk);
-              } else if (eventType === "end-of-stream") {
-                console.log("End-of-stream event received from backend.");
-                // This break is for the inner `while ((eolIndex...))` loop.
-                // The outer `while (true)` loop will break when `reader.read()` returns `done: true`.
+              } else if (currentEventType === "end-of-stream") {
+                console.log(
+                  "LLM_MOD_LOG: SSE Event 'end-of-stream':",
+                  parsedData.message,
+                );
+                _updateStreamedMessage(assistantMessageDiv, "", true);
+                streamShouldEnd = true;
                 break;
               }
-              // Handle other custom events if necessary
             } catch (e) {
               console.error(
-                "Error parsing JSON from stream data:",
+                "LLM_MOD_LOG: Error parsing JSON from stream data:",
                 dataContent,
                 e,
               );
-              // It might be a plain text chunk if JSON.parse fails and backend changes format.
-              // For now, we assume JSON string data as per backend setup.
-              // accumulatedResponse += dataContent; // Fallback: treat as raw text
-              // _updateStreamedMessage(assistantMessageDiv, dataContent);
+              if (
+                currentEventType === "message" ||
+                currentEventType === "data"
+              ) {
+                accumulatedResponse += dataContent;
+                _updateStreamedMessage(assistantMessageDiv, dataContent);
+              }
             }
           }
-        } // end while for SSE message processing
-      } // end while for reader.read()
+          if (streamShouldEnd) break;
+        }
+        if (streamShouldEnd) {
+          console.log("LLM_MOD_LOG: Breaking outer stream read loop.");
+          break;
+        }
+      }
 
+      console.log(
+        "LLM_MOD_LOG: _handleSendLlmPrompt - Finished reading stream.",
+      );
       llmConversationHistory.push({
         role: "assistant",
         content: accumulatedResponse,
       });
     } catch (error) {
-      console.error("LLM_MODULE: Error during LLM stream processing:", error);
+      console.error(
+        "LLM_MOD_LOG: _handleSendLlmPrompt - Error during fetch/stream processing:",
+        error,
+      );
       const errorMsg = `Sorry, I encountered an error: ${dependencies.escapeHtml(error.message)}`;
       if (assistantMessageDiv) {
-        _updateStreamedMessage(assistantMessageDiv, errorMsg, true);
+        assistantMessageDiv.dataset.rawContent = errorMsg;
+        assistantMessageDiv.innerHTML = _formatResponseForDisplay(errorMsg);
+        _addCodeActionButtonsToMessage(assistantMessageDiv);
       } else {
-        _addMessageToChatHistory(errorMsg, "assistant", true);
+        _addMessageToChatHistory(errorMsg, "assistant", false);
       }
       llmConversationHistory.push({
         role: "assistant",
         content: `Error: ${error.message}`,
       });
     } finally {
+      console.log(
+        "LLM_MOD_LOG: _handleSendLlmPrompt - Finally block executing.",
+      );
       if (llmPromptInputEl) llmPromptInputEl.disabled = false;
       if (llmSendPromptBtn) llmSendPromptBtn.disabled = false;
       if (llmPromptInputEl) llmPromptInputEl.focus();
+      console.log(
+        "LLM_MOD_LOG: _handleSendLlmPrompt - UI elements re-enabled.",
+      );
     }
+    console.log("LLM_MOD_LOG: _handleSendLlmPrompt() finished.");
   }
 
   function _getSelectedLlmContext() {
+    console.log("LLM_MOD_LOG: _getSelectedLlmContext() called.");
     const context = {};
     const appVars = dependencies.getAppVariables();
+    if (!appVars) {
+      console.error(
+        "LLM_MOD_LOG: getAppVariables dependency is not available or returned null/undefined.",
+      );
+      return context;
+    }
 
-    if (
-      !appVars.currentDeviceSerial &&
-      (llmContextUiHierarchyCheckbox?.checked ||
-        llmContextSelectedElementCheckbox?.checked ||
-        llmContextDeviceInfoCheckbox?.checked)
-    ) {
+    const noDeviceContextNeeded = !(
+      llmContextUiHierarchyCheckbox?.checked ||
+      llmContextSelectedElementCheckbox?.checked ||
+      llmContextDeviceInfoCheckbox?.checked
+    );
+    if (!appVars.currentDeviceSerial && !noDeviceContextNeeded) {
       dependencies.updateMessage(
-        "No device selected. Some LLM context might be limited.",
+        "Please select a device to include its context.",
         "warning",
-        3000,
       );
     }
 
     if (
       llmContextUiHierarchyCheckbox?.checked &&
-      appVars.currentHierarchyData
+      appVars.currentHierarchyData &&
+      appVars.currentDeviceSerial
     ) {
       context.uiHierarchy = JSON.parse(
         JSON.stringify(appVars.currentHierarchyData),
       );
     }
-    if (llmContextSelectedElementCheckbox?.checked && appVars.selectedNode) {
+    if (
+      llmContextSelectedElementCheckbox?.checked &&
+      appVars.selectedNode &&
+      appVars.currentDeviceSerial
+    ) {
       context.selectedElement = JSON.parse(
         JSON.stringify(appVars.selectedNode),
       );
@@ -467,108 +579,210 @@ const LlmAssistantModule = (function () {
         context.selectedElement.generatedXPath = appVars.generatedXpathValue;
       }
     }
+
+    // --- Enhanced logging for Python Console Output ---
     if (llmContextPythonConsoleOutputCheckbox?.checked) {
-      const outputEl = document.getElementById("interactive-python-output");
       if (
-        outputEl?.textContent &&
-        outputEl.textContent.trim() !== "" &&
-        outputEl.textContent.trim() !== "# Output will appear here..." &&
-        outputEl.textContent.trim() !== "# No output"
+        dependencies.PythonConsoleManager &&
+        typeof dependencies.PythonConsoleManager.getOutput === "function"
       ) {
-        const linesToGet = llmContextPythonConsoleOutputLinesSelect.value;
-        const fullOutput = outputEl.textContent;
-        if (linesToGet === "lastError") {
-          const errorMarker = "--- TRACEBACK ---";
-          const stderrMarker = "--- STDERR ---";
-          let errorIndex = fullOutput.lastIndexOf(errorMarker);
-          if (errorIndex === -1)
-            errorIndex = fullOutput.lastIndexOf(stderrMarker);
-          context.pythonConsoleOutput =
-            errorIndex !== -1
-              ? fullOutput.substring(errorIndex)
-              : fullOutput.split("\n").slice(-10).join("\n");
-        } else if (linesToGet === "all") {
-          context.pythonConsoleOutput = fullOutput;
+        const outputLinesCount =
+          llmContextPythonConsoleOutputLinesSelect?.value;
+        const fullOutput = dependencies.PythonConsoleManager.getOutput();
+        console.log(
+          "LLM_MOD_LOG: PythonConsoleManager.getOutput() returned:",
+          fullOutput
+            ? `"${fullOutput.substring(0, 200)}..."`
+            : "''(empty) or null",
+        );
+
+        if (fullOutput) {
+          if (outputLinesCount === "all") {
+            context.pythonConsoleOutput = fullOutput;
+            console.log("LLM_MOD_LOG: Python Context: Sending all output.");
+          } else if (outputLinesCount === "lastError") {
+            console.log(
+              "LLM_MOD_LOG: Python Context: Attempting to find last error.",
+            );
+            const errorKeywords = [
+              "Traceback (most recent call last):",
+              "Error:",
+              "Exception:",
+            ]; // Case-sensitive
+            let lastErrorIndex = -1;
+            let foundKeyword = "";
+
+            for (const keyword of errorKeywords) {
+              const currentIndex = fullOutput.lastIndexOf(keyword);
+              if (currentIndex > lastErrorIndex) {
+                // Ensure we get the truly last one if keywords overlap
+                lastErrorIndex = currentIndex;
+                foundKeyword = keyword;
+              }
+            }
+            console.log(
+              `LLM_MOD_LOG: Python Context 'lastError' - Found keyword: '${foundKeyword}', Index: ${lastErrorIndex}`,
+            );
+            if (lastErrorIndex !== -1) {
+              context.pythonConsoleOutput =
+                fullOutput.substring(lastErrorIndex);
+              console.log(
+                "LLM_MOD_LOG: Python Context 'lastError' - Extracted error text:\n---\n",
+                context.pythonConsoleOutput.substring(0, 500) + "...\n---",
+              );
+            } else {
+              context.pythonConsoleOutput =
+                "# No error found in recent Python console output.";
+              console.log(
+                "LLM_MOD_LOG: Python Context 'lastError' - No error keywords matched.",
+              );
+            }
+          } else {
+            // "5", "10"
+            const linesToGet = parseInt(outputLinesCount, 10);
+            if (!isNaN(linesToGet) && linesToGet > 0) {
+              const lines = fullOutput.split("\n");
+              context.pythonConsoleOutput = lines.slice(-linesToGet).join("\n");
+              console.log(
+                `LLM_MOD_LOG: Python Context: Sending last ${linesToGet} lines.`,
+              );
+            } else {
+              console.warn(
+                `LLM_MOD_LOG: Python Context: Invalid number of lines to get: ${outputLinesCount}`,
+              );
+            }
+          }
         } else {
-          context.pythonConsoleOutput = fullOutput
-            .split("\n")
-            .slice(-parseInt(linesToGet, 10))
-            .join("\n");
+          console.log(
+            "LLM_MOD_LOG: Python Context: Full output from PythonConsoleManager was empty or null.",
+          );
+          context.pythonConsoleOutput =
+            "# Python console output is currently empty.";
         }
+      } else {
+        console.warn(
+          "LLM_MOD_LOG: PythonConsoleManager.getOutput is not available. Cannot get Python console output.",
+        );
+        context.pythonConsoleOutput =
+          "# Python console output is unavailable (manager error).";
       }
     }
+    // --- End of Python Console Output logging ---
+
     if (
       llmContextPythonCodeCheckbox?.checked &&
       dependencies.PythonConsoleManager?.getCode
     ) {
-      const pyCode = dependencies.PythonConsoleManager.getCode();
-      if (pyCode?.trim() !== "") context.pythonCode = pyCode;
+      context.pythonCode = dependencies.PythonConsoleManager.getCode();
     }
     if (
       llmContextDeviceInfoCheckbox?.checked &&
       appVars.currentDeviceSerial &&
       appVars.devices
     ) {
-      const selectedDeviceData = appVars.devices.find(
+      const currentDevice = appVars.devices.find(
         (d) => d.serial === appVars.currentDeviceSerial,
       );
-      context.deviceInfo = {
-        serial: appVars.currentDeviceSerial,
-        model: selectedDeviceData?.model || "N/A",
-        sdkVersion: selectedDeviceData?.sdkVersion || "N/A",
-        actualDeviceWidth: appVars.actualDeviceWidth,
-        actualDeviceHeight: appVars.actualDeviceHeight,
-      };
+      if (currentDevice) {
+        context.deviceInfo = {
+          serial: currentDevice.serial,
+          model: currentDevice.model,
+          sdkVersion: currentDevice.sdkVersion,
+          actualWidth: appVars.actualDeviceWidth,
+          actualHeight: appVars.actualDeviceHeight,
+        };
+      }
     }
+    console.log("LLM_MOD_LOG: _getSelectedLlmContext completed.");
     return context;
   }
 
-  // _callBackendLlmChat is removed as its functionality is now part of _handleSendLlmPrompt with fetch
-
-  // --- Public Functions (exposed via return) ---
   function init(initDeps) {
-    console.log("LlmAssistantModule: Initializing...");
+    console.log(
+      "LLM_MOD_LOG: LlmAssistantModule.init() called with dependencies:",
+      Object.keys(initDeps),
+    );
     dependencies = { ...dependencies, ...initDeps };
-
-    if (!_fetchLlmDomElements()) {
+    if (typeof dependencies.getAppVariables !== "function") {
       console.error(
-        "LLM_MODULE: Initialization failed due to missing DOM elements.",
+        "LLM_MOD_LOG: CRITICAL - 'getAppVariables' dependency missing in init().",
+      );
+      return;
+    }
+    if (typeof dependencies.updateMessage !== "function") {
+      console.error(
+        "LLM_MOD_LOG: CRITICAL - 'updateMessage' dependency missing in init().",
       );
       return;
     }
 
-    if (llmSendPromptBtn)
+    const domElementsFetched = _fetchLlmDomElements();
+    console.log(
+      "LLM_MOD_LOG: LlmAssistantModule.init - _fetchLlmDomElements result:",
+      domElementsFetched,
+    );
+    if (!domElementsFetched) {
+      console.error(
+        "LLM_MOD_LOG: LlmAssistantModule.init - SKIPPING event listener attachment due to missing critical DOM elements.",
+      );
+      return;
+    }
+
+    if (llmSendPromptBtn) {
       llmSendPromptBtn.addEventListener("click", _handleSendLlmPrompt);
+      console.log(
+        "LLM_MOD_LOG: LlmAssistantModule.init - Event listener ATTACHED to llm-send-prompt-btn.",
+      );
+    } else {
+      console.error(
+        "LLM_MOD_LOG: LlmAssistantModule.init - llmSendPromptBtn is NULL post-fetch. CANNOT attach click listener.",
+      );
+    }
     if (llmPromptInputEl) {
       llmPromptInputEl.addEventListener("keypress", function (e) {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
+          console.log(
+            "LLM_MOD_LOG: Enter pressed in prompt input, calling _handleSendLlmPrompt.",
+          );
           _handleSendLlmPrompt();
         }
       });
       llmPromptInputEl.addEventListener("input", function () {
         this.style.height = "auto";
-        this.style.height =
-          Math.min(
-            this.scrollHeight,
-            parseInt(getComputedStyle(this).maxHeight) || 120,
-          ) + "px";
+        this.style.height = Math.min(this.scrollHeight, 120) + "px";
       });
+      console.log(
+        "LLM_MOD_LOG: LlmAssistantModule.init - Event listeners for llmPromptInputEl (keypress, input) attached.",
+      );
+    } else {
+      console.error(
+        "LLM_MOD_LOG: LlmAssistantModule.init - llmPromptInputEl is NULL post-fetch.",
+      );
     }
-    if (llmClearConversationBtn)
+    if (llmClearConversationBtn) {
       llmClearConversationBtn.addEventListener("click", _clearLlmChat);
-
+      console.log(
+        "LLM_MOD_LOG: LlmAssistantModule.init - Event listener attached to llm-clear-conversation-btn.",
+      );
+    } else {
+      console.error(
+        "LLM_MOD_LOG: LlmAssistantModule.init - llmClearConversationBtn is NULL post-fetch.",
+      );
+    }
     if (
-      llmConversationHistory.length === 0 &&
       llmChatHistoryEl &&
-      llmChatHistoryEl.children.length === 0
+      llmChatHistoryEl.children.length === 0 &&
+      llmConversationHistory.length === 0
     ) {
       _addMessageToChatHistory(
         "Hello! How can I assist you with your UI automation tasks today?",
         "assistant",
       );
     }
-    console.log("LlmAssistantModule: Initialization complete.");
+    console.log(
+      "LLM_MOD_LOG: LlmAssistantModule.init() finished successfully.",
+    );
   }
 
   function notifyNodeSelectionChanged(node) {
@@ -578,30 +792,42 @@ const LlmAssistantModule = (function () {
   }
 
   function openPropertiesTab(evt, tabName) {
-    console.log(`LLM_MODULE: openPropertiesTab called for: ${tabName}`);
-    let i, tc, tb;
-    tc = document.querySelectorAll("#panel-properties > .tab-content");
-    for (i = 0; i < tc.length; i++) {
-      tc[i].style.display = "none";
-      tc[i].classList.remove("active");
+    console.log(`LLM_MOD_LOG: openPropertiesTab called for: ${tabName}`);
+    let i, tabcontent, tablinks;
+    tabcontent = document.querySelectorAll("#panel-properties > .tab-content");
+    for (i = 0; i < tabcontent.length; i++) {
+      tabcontent[i].style.display = "none";
+      tabcontent[i].classList.remove("active");
     }
-    tb = document.querySelectorAll("#properties-panel-tabs .tab-button");
-    for (i = 0; i < tb.length; i++) {
-      tb[i].classList.remove("active");
+    tablinks = document.querySelectorAll("#properties-panel-tabs .tab-button");
+    for (i = 0; i < tablinks.length; i++) {
+      tablinks[i].classList.remove("active");
     }
-    const activeTabContent = document.getElementById(tabName);
-    if (activeTabContent) {
-      activeTabContent.style.display = "flex";
-      activeTabContent.classList.add("active");
+    const activeTab = document.getElementById(tabName);
+    if (activeTab) {
+      activeTab.style.display = "flex";
+      activeTab.classList.add("active");
     }
     if (evt && evt.currentTarget) {
       evt.currentTarget.classList.add("active");
+    } else {
+      for (i = 0; i < tablinks.length; i++) {
+        const onclickAttr = tablinks[i].getAttribute("onclick");
+        if (
+          onclickAttr &&
+          (onclickAttr.includes("'" + tabName + "'") ||
+            onclickAttr.includes('"' + tabName + '"'))
+        ) {
+          tablinks[i].classList.add("active");
+          break;
+        }
+      }
     }
-    // if (tabName === "llm-assistant-tab-content" && llmPromptInputEl) {
-    // llmPromptInputEl.focus(); // Optional
-    // }
   }
 
+  console.log(
+    "LLM_MOD_LOG: LlmAssistantModule IIFE structure defined, returning public methods.",
+  );
   return {
     init: init,
     notifyNodeSelectionChanged: notifyNodeSelectionChanged,
@@ -609,6 +835,28 @@ const LlmAssistantModule = (function () {
   };
 })();
 
-if (LlmAssistantModule && LlmAssistantModule.openPropertiesTab) {
-  window.openPropertiesTab = LlmAssistantModule.openPropertiesTab;
+console.log(
+  "LLM_MOD_LOG: IIFE executed. Checking window.LlmAssistantModule:",
+  window.LlmAssistantModule,
+);
+if (
+  window.LlmAssistantModule &&
+  typeof window.LlmAssistantModule.openPropertiesTab === "function"
+) {
+  window.openPropertiesTab = window.LlmAssistantModule.openPropertiesTab;
+  console.log(
+    "LLM_MOD_LOG: window.openPropertiesTab function has been successfully assigned from LlmAssistantModule.",
+  );
+} else {
+  console.error(
+    "LLM_MOD_LOG: CRITICAL - Failed to assign window.openPropertiesTab.",
+  );
+  if (!window.LlmAssistantModule)
+    console.error(
+      "LLM_MOD_LOG: Detail - window.LlmAssistantModule is undefined.",
+    );
+  else
+    console.error(
+      "LLM_MOD_LOG: Detail - window.LlmAssistantModule.openPropertiesTab is not a function.",
+    );
 }

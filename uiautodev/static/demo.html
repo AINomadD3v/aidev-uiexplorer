@@ -131,9 +131,9 @@
 
         /* LLM Assistant Styles */
         #llm-assistant-tab-content { /* This now becomes a direct child of panel-properties */
-             display: flex; /* Ensure it uses flex for its children */
-             flex-direction: column; /* Stack panel-body-llm inside */
-             overflow: hidden; /* Manage overflow for the whole tab */
+            display: flex; /* Ensure it uses flex for its children */
+            flex-direction: column; /* Stack panel-body-llm inside */
+            overflow: hidden; /* Manage overflow for the whole tab */
         }
         #llm-assistant-tab-content .panel-body-llm { /* Specific class for LLM panel body */
             display: flex;
@@ -417,12 +417,15 @@
             </div>
         </div>
 
-        <div id="panel-properties" class="panel"> <div class="tabs" id="properties-panel-tabs"> <button class="tab-button active" onclick="window.openPropertiesTab(event, 'element-details-tab-content')">Element Details</button>
+        <div id="panel-properties" class="panel">
+             <div class="tabs" id="properties-panel-tabs">
+                 <button class="tab-button active" onclick="window.openPropertiesTab(event, 'element-details-tab-content')">Element Details</button>
                 <button class="tab-button" onclick="window.openPropertiesTab(event, 'llm-assistant-tab-content')">LLM Assistant</button>
             </div>
 
             <div id="element-details-tab-content" class="tab-content active">
-                <div class="panel-body-content"> <h4>Selected Element Properties</h4>
+                <div class="panel-body-content">
+                     <h4>Selected Element Properties</h4>
                     <div id="element-properties-view">Select an element to see its properties.</div>
                     <div id="generated-xpath-container">
                         <h4>Generated XPath</h4>
@@ -432,7 +435,9 @@
             </div>
 
             <div id="llm-assistant-tab-content" class="tab-content">
-                <div class="panel-body-llm"> <div class="llm-chat-main"> <div id="llm-chat-history">
+                <div class="panel-body-llm">
+                     <div class="llm-chat-main">
+                         <div id="llm-chat-history">
                             </div>
                         <div class="llm-prompt-area">
                             <textarea id="llm-prompt-input" placeholder="Type your message..." rows="1"></textarea>
@@ -440,7 +445,8 @@
                         </div>
                     </div>
 
-                    <div class="llm-context-sidebar"> <h5>Attach Context:</h5>
+                    <div class="llm-context-sidebar">
+                         <h5>Attach Context:</h5>
                         <label class="llm-context-item">
                             <input type="checkbox" id="llm-context-ui-hierarchy" data-context-key="uiHierarchy"> Current UI Hierarchy
                         </label>
@@ -499,40 +505,56 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/anyword-hint.min.js"></script>
 
     <script src="/static/python_console_module.js"></script>
-    <script src="/static/local_inspector.js"></script>
-    <script src="/static/llm_assistant_module.js"></script> <script>
+    <script src="/static/llm_assistant_module.js"></script>  <script src="/static/local_inspector.js"></script>     <script>
+        // This inline script runs after all the above scripts are loaded and parsed.
         document.addEventListener('DOMContentLoaded', function() {
+            console.log("DEMO_HTML_LOG: DOMContentLoaded event fired from inline script in demo.html.");
+            
             const toggleBtn = document.getElementById('toggle-device-select-btn');
             const deviceMenu = document.getElementById('device-selection-area-collapsible');
             if (toggleBtn && deviceMenu) {
                 toggleBtn.addEventListener('click', function() {
                     deviceMenu.classList.toggle('collapsed');
                 });
+                console.log("DEMO_HTML_LOG: Toggle device select button listener attached.");
+            } else {
+                console.warn("DEMO_HTML_LOG: Toggle device select button or menu not found.");
             }
 
-            // Initialize the default tab for #panel-properties
-            // The LlmAssistantModule makes openPropertiesTab global.
-            // We need to ensure the first tab is displayed correctly on load.
-            const defaultPropertiesTabButton = document.querySelector("#properties-panel-tabs .tab-button.active");
-            if (defaultPropertiesTabButton && window.openPropertiesTab) {
-                 // Simulate a click on the default active tab button to ensure its content is shown
-                const defaultTabName = defaultPropertiesTabButton.getAttribute('onclick').match(/openPropertiesTab\(event, ['"]([^'"]+)['"]\)/)[1];
-                if (defaultTabName) {
-                    window.openPropertiesTab({ currentTarget: defaultPropertiesTabButton }, defaultTabName);
-                }
-            } else {
-                // Fallback if no tab is marked active initially, activate the first one.
-                 const firstPropertiesTabButton = document.querySelector("#properties-panel-tabs .tab-button");
-                 if(firstPropertiesTabButton && window.openPropertiesTab) {
-                    const firstTabName = firstPropertiesTabButton.getAttribute('onclick').match(/openPropertiesTab\(event, ['"]([^'"]+)['"]\)/)[1];
-                    if (firstTabName) {
-                         window.openPropertiesTab({ currentTarget: firstPropertiesTabButton }, firstTabName);
-                         // Also, ensure the button itself gets the 'active' class if not already set
-                         document.querySelectorAll("#properties-panel-tabs .tab-button").forEach(btn => btn.classList.remove('active'));
-                         firstPropertiesTabButton.classList.add('active');
+            // Attempt to initialize the default tab for #panel-properties
+            // This relies on window.openPropertiesTab being defined by LlmAssistantModule
+            // and LlmAssistantModule.init being called by local_inspector.js
+            // which itself runs after LlmAssistantModule is defined.
+            console.log("DEMO_HTML_LOG: Attempting to initialize default properties tab.");
+            try {
+                const defaultPropertiesTabButton = document.querySelector("#properties-panel-tabs .tab-button.active");
+                if (defaultPropertiesTabButton && typeof window.openPropertiesTab === 'function') {
+                    const defaultTabName = defaultPropertiesTabButton.getAttribute('onclick').match(/openPropertiesTab\(event, ['"]([^'"]+)['"]\)/)[1];
+                    if (defaultTabName) {
+                        console.log("DEMO_HTML_LOG: Opening default properties tab based on 'active' class:", defaultTabName);
+                        window.openPropertiesTab({ currentTarget: defaultPropertiesTabButton }, defaultTabName);
                     }
-                 }
+                } else {
+                    const firstPropertiesTabButton = document.querySelector("#properties-panel-tabs .tab-button");
+                    if(firstPropertiesTabButton && typeof window.openPropertiesTab === 'function') {
+                        const firstTabName = firstPropertiesTabButton.getAttribute('onclick').match(/openPropertiesTab\(event, ['"]([^'"]+)['"]\)/)[1];
+                        if (firstTabName) {
+                            console.log("DEMO_HTML_LOG: Opening first properties tab as fallback:", firstTabName);
+                            window.openPropertiesTab({ currentTarget: firstPropertiesTabButton }, firstTabName);
+                            document.querySelectorAll("#properties-panel-tabs .tab-button").forEach(btn => btn.classList.remove('active'));
+                            firstPropertiesTabButton.classList.add('active');
+                        }
+                    } else {
+                        console.warn("DEMO_HTML_LOG: Could not find properties tab button or window.openPropertiesTab to initialize default properties tab.");
+                        if(typeof window.openPropertiesTab !== 'function'){
+                            console.warn("DEMO_HTML_LOG: window.openPropertiesTab is not defined at this point.");
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("DEMO_HTML_LOG: Error during default properties tab initialization:", e);
             }
+            console.log("DEMO_HTML_LOG: Inline DOMContentLoaded script in demo.html finished.");
         });
     </script>
 </body>
