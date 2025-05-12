@@ -194,6 +194,7 @@
             uvloop
             httptools
             python-dotenv
+            jedi
 
             adbutilsCustom
             uiautomator2Custom
