@@ -211,15 +211,46 @@
             pkgsWithOverlay.git
           ];
           shellHook = ''
-            echo "Entered uiautodev Nix development shell."
-            export PYTHONPATH="${pkgsWithOverlay.lib.makeSearchPath "lib/python${pythonOver.pythonVersion}/site-packages" [pythonEnv]}:./uiautodev:$PYTHONPATH"
-            export PATH="${pythonEnv}/bin:$PATH"
-            echo "Python: $(which python) [$(${pythonOver}/bin/python --version)]"
-            echo "ADB:    $(which adb)"
-            echo "Poetry: $(which poetry)"
+                    # Optional: Clear the screen for a cleaner start (remove if you don't like this)
+            # clear
+
+            # Add project source directory to PYTHONPATH for local imports only if it exists
+            if [ -d "./uiautodev" ]; then
+              export PYTHONPATH="./uiautodev:$PYTHONPATH"
+              __uiautodev_path_added=1
+            else
+              __uiautodev_path_added=0
+            fi
+
             echo ""
+            echo "=================================================="
+            echo " uiautodev Development Environment Activated"
+            echo "=================================================="
+            echo ""
+            echo "Tools Ready:"
+            # Directly use the python path from Nix; execute to get version
+            # Use which for other tools, check if found
+            echo "  ADB:    $(which adb || echo 'Not found in PATH')"
+            echo "  Poetry: $(which poetry || echo 'Not found in PATH')"
+            echo ""
+
+            # Report if PYTHONPATH was modified
+            echo "Project Setup:"
+            if [ $__uiautodev_path_added -eq 1 ]; then
+              echo "  PYTHONPATH includes ./uiautodev"
+            else
+              echo "  Note: ./uiautodev directory not found, not added to PYTHONPATH."
+            fi
+            unset __uiautodev_path_added # Clean up temporary variable
+            echo ""
+
             echo "To run the uiautodev server:"
             echo "  uvicorn uiautodev.app:app --host 127.0.0.1 --port 20242 --reload"
+            echo ""
+            echo "Access the server at: http://127.0.0.1:20242"
+            echo ""
+            echo "=================================================="
+            echo ""
           '';
         };
       }
