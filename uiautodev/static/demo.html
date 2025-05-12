@@ -53,7 +53,7 @@
 
         #panel-device-view { flex: 0 0 30%; min-width: 300px; max-width: 420px; }
         #panel-properties { flex: 0 0 35%; min-width: 320px; }
-        #panel-hierarchy-code { flex: 1; min-width: 250px; display: flex; flex-direction: column; } /* Ensure parent is flex column */
+        #panel-hierarchy-code { flex: 1; min-width: 250px; display: flex; flex-direction: column; }
 
         .device-selection-header-button { background: none; border: none; color: var(--dark-text-secondary); cursor: pointer; padding: 2px 6px; font-size: 1.1em; border-radius: 3px; line-height: 1;}
         .device-selection-header-button:hover { background-color: var(--dark-bg-hover); }
@@ -79,6 +79,7 @@
 
         .tab-content { display: none; flex-grow: 1; flex-direction: column; overflow: hidden; }
         .tab-content.active { display: flex; }
+
 
         #panel-properties .panel-header { display: none; }
         #panel-properties .tabs { border-radius: 4px 4px 0 0; }
@@ -124,9 +125,10 @@
         .small-button { padding: 5px 8px; font-size: 0.85em; }
 
         .tab-panel-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--dark-border-secondary); font-size: 0.95em; color: var(--dark-text-secondary); font-weight: 500; flex-shrink: 0; }
-        #hierarchy-tab-content { padding: 10px; /* Add padding to hierarchy tab content */ }
+        #hierarchy-tab-content { padding: 10px; }
         #hierarchy-search-input { width: 100%; padding: 6px 8px; margin-bottom: 10px; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; font-size: 0.9em; }
         #hierarchy-search-input:focus { border-color: var(--dark-accent-primary); outline: none; }
+
         #hierarchy-tree-view { flex-grow: 1; overflow: auto; font-size: 0.85em; font-family: var(--font-family-monospace); line-height: 1.65; padding-right: 5px; padding-bottom: 5px; }
         #hierarchy-tree-view > ul { min-width: 100%; width: max-content; }
         #hierarchy-tree-view ul { list-style-type: none; padding-left: 0; margin: 0; }
@@ -138,7 +140,6 @@
         #hierarchy-tree-view li ul.collapsed { display: none; }
         #hierarchy-tree-view li ul { margin-left: 12px; padding-left: 10px; border-left: 1px dotted var(--dark-border-secondary); }
         #hierarchy-tree-view > ul { border-left: none; padding-left: 0; }
-        #hierarchy-tree-view > ul > li > ul { margin-left: 12px; padding-left: 10px; border-left: 1px dotted var(--dark-border-secondary); }
         #hierarchy-tree-view li .node-text-wrapper { padding: 1px 3px; border-radius: 2px; cursor: pointer; flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #hierarchy-tree-view li .node-content:hover > .node-text-wrapper { background-color: var(--dark-bg-hover); }
         #hierarchy-tree-view li.tree-node-selected > .node-content { background-color: var(--dark-accent-primary) !important; }
@@ -148,7 +149,6 @@
         #hierarchy-tree-view small { color: #808080; font-size: 0.9em; }
         body.dark-theme #hierarchy-tree-view small { color: #6a6a6a; }
 
-        /* Original CodeMirror Styles (will be specifically overridden for Python console) */
         .CodeMirror {
             height: 200px; border: 1px solid var(--dark-border-primary); border-radius: 4px;
             font-family: var(--font-family-monospace) !important; font-size: 13px !important;
@@ -165,31 +165,27 @@
         .CodeMirror-hint { padding: 3px 7px !important; border-radius: 2px !important; }
         .CodeMirror-hint-active { background-color: var(--dark-accent-primary) !important; color: white !important; }
 
-
-        /* --- NEW/MODIFIED Python Console Redesign Styles --- */
         #python-tab-content {
             display: flex;
             flex-direction: column;
-            padding: 0; /* No padding on the tab content itself, children will manage */
-            position: relative; /* For absolute positioning of the output panel */
-            overflow: hidden; /* Critical for managing flex children and absolute panel */
+            padding: 0;
+            position: relative;
         }
 
         .python-editor-area {
-            flex-grow: 1; /* Editor area takes all available vertical space ABOVE the toolbar */
-            display: flex; /* Allows CodeMirror to fill it */
-            position: relative; /* New context for absolute output panel */
-            overflow: hidden; /* CodeMirror handles its own scroll */
+            flex-grow: 1;
+            display: flex;
+            position: relative;
+            overflow: hidden;
         }
 
-        /* Override default CodeMirror styles specifically for the Python console editor */
         #python-tab-content .python-editor-area .CodeMirror {
-            height: 100% !important; /* Make CodeMirror fill .python-editor-area */
+            height: 100% !important;
             width: 100% !important;
-            flex-grow: 1; /* Should not be needed if parent is display:flex and this is height:100% */
-            border: 1px solid var(--dark-border-primary); /* Border around the editor itself */
-            border-radius: 4px; /* Optional: rounded corners for the editor */
-            margin-bottom: 0; /* No margin if toolbar is separate */
+            flex-grow: 1;
+            border: 1px solid var(--dark-border-primary);
+            border-radius: 4px;
+            margin-bottom: 0;
         }
 
         .python-toolbar {
@@ -198,13 +194,13 @@
             padding: 8px 10px;
             background-color: var(--dark-bg-tertiary);
             border-top: 1px solid var(--dark-border-primary);
-            flex-shrink: 0; /* Toolbar should not shrink */
+            flex-shrink: 0;
             align-items: center;
-            position: relative; /* To ensure it's above editor if stacking contexts get tricky (though not needed here) */
-            z-index: 50; /* Below output panel but above general content */
+            position: relative;
+            z-index: 50;
         }
 
-        .python-toolbar button { /* General styling for buttons in this toolbar */
+        .python-toolbar button {
             padding: 6px 12px;
             margin-bottom: 0;
             font-size: 0.9em;
@@ -222,49 +218,45 @@
 
         .python-output-panel {
             position: absolute;
-            bottom: 0; /* Positioned at the bottom of its relative parent (.python-editor-area) */
+            bottom: 0;
             left: 0;
             right: 0;
             background-color: var(--dark-bg-primary);
-            border-top: 2px solid var(--dark-accent-primary); /* More prominent top border */
+            border-top: 2px solid var(--dark-accent-primary);
             box-shadow: 0 -4px 12px rgba(0,0,0,0.4);
-            z-index: 150; /* High z-index to be on top of the editor */
+            z-index: 150;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* Let child scroll */
-            height: 0; /* Start collapsed - JS will control this */
+            overflow: hidden;
+            height: 0;
             transition: height 0.25s ease-out;
         }
 
         .python-output-panel.open {
-            /* This class will be toggled by JS */
-            /* Height is set by JS based on drag or default/localStorage */
-             min-height: 60px; /* Minimum visible height when open */
+            min-height: 60px;
         }
-
 
         #python-output-drag-handle {
             width: 100%;
-            height: 12px; /* Slightly taller for easier grabbing */
+            height: 12px;
             background-color: var(--dark-border-secondary);
             cursor: ns-resize;
             flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-bottom: 1px solid var(--dark-bg-tertiary); /* Subtle separator */
+            border-bottom: 1px solid var(--dark-bg-tertiary);
         }
         #python-output-drag-handle:hover {
             background-color: var(--dark-accent-primary);
         }
-        #python-output-drag-handle::before { /* Optional visual cue for dragging */
-            content: '•••'; /* Unicode for three dots or use an SVG icon */
+        #python-output-drag-handle::before {
+            content: '•••';
             color: var(--dark-text-placeholder);
             font-size: 1.2em;
-            line-height: 0; /* Adjust vertical alignment of dots */
+            line-height: 0;
             letter-spacing: 2px;
         }
-
 
         #interactive-python-output {
             flex-grow: 1;
@@ -273,12 +265,11 @@
             font-family: var(--font-family-monospace);
             font-size: 12px;
             color: var(--dark-text-secondary);
-            background-color: var(--dark-bg-primary); /* Matches panel background */
-            border: none; /* Panel has border */
+            background-color: var(--dark-bg-primary);
+            border: none;
             border-radius: 0;
-            min-height: 0; /* Allows it to shrink fully if panel height is small */
+            min-height: 0;
         }
-
     </style>
 </head>
 <body class="dark-theme">
@@ -313,22 +304,11 @@
 
         <div id="panel-properties" class="panel">
             <div class="tabs" id="properties-panel-tabs">
-                <button class="tab-button active" onclick="window.openPropertiesTab(event, 'element-details-tab-content')">Element Details</button>
-                <button class="tab-button" onclick="window.openPropertiesTab(event, 'llm-assistant-tab-content')">LLM Assistant</button>
+                <button class="tab-button active" onclick="window.openPropertiesTab(event, 'llm-assistant-tab-content')">LLM Assistant</button>
+                <button class="tab-button" onclick="window.openPropertiesTab(event, 'element-details-tab-content')">Element Details</button>
             </div>
 
-            <div id="element-details-tab-content" class="tab-content active">
-                <div class="panel-body-content">
-                    <h4>Selected Element Properties</h4>
-                    <div id="element-properties-view">Select an element to see its properties.</div>
-                    <div id="generated-xpath-container">
-                        <h4>Generated XPath</h4>
-                        <input type="text" id="generated-xpath" readonly placeholder="XPath will appear here">
-                    </div>
-                </div>
-            </div>
-
-            <div id="llm-assistant-tab-content" class="tab-content">
+            <div id="llm-assistant-tab-content" class="tab-content active">
                 <div class="panel-body-llm">
                     <div class="llm-chat-main">
                         <div id="llm-chat-history"></div>
@@ -364,24 +344,30 @@
                     </div>
                 </div>
             </div>
+
+            <div id="element-details-tab-content" class="tab-content">
+                <div class="panel-body-content">
+                    <h4>Selected Element Properties</h4>
+                    <div id="element-properties-view">Select an element to see its properties.</div>
+                    <div id="generated-xpath-container">
+                        <h4>Generated XPath</h4>
+                        <input type="text" id="generated-xpath" readonly placeholder="XPath will appear here">
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div id="panel-hierarchy-code" class="panel"> <div class="tabs">
-                <button class="tab-button active" onclick="window.openTab(event, 'hierarchy-tab-content')">UI Hierarchy</button>
-                <button class="tab-button" onclick="window.openTab(event, 'python-tab-content')">Python Console</button>
-            </div>
-            <div id="hierarchy-tab-content" class="tab-content active">
-                <input type="text" id="hierarchy-search-input" placeholder="Search by name, text, ID, desc...">
-                <div class="tab-panel-header" style="margin-top: 8px;">
-                    <span>Element Tree</span>
-                </div>
-                <div id="hierarchy-tree-view">Select a device and load hierarchy...</div>
+        <div id="panel-hierarchy-code" class="panel">
+             <div class="tabs">
+                <button class="tab-button active" onclick="window.openTab(event, 'python-tab-content')">Python Console</button>
+                <button class="tab-button" onclick="window.openTab(event, 'hierarchy-tab-content')">UI Hierarchy</button>
             </div>
 
-            <div id="python-tab-content" class="tab-content">
+            <div id="python-tab-content" class="tab-content active">
                 <div class="python-editor-area">
                     <textarea id="interactive-python-editor" placeholder="Enter Python code here (e.g., print(d.info) or d.shell('ls'))"></textarea>
-                    <div id="python-output-panel" class="python-output-panel"> <div id="python-output-drag-handle" class="python-output-drag-handle"></div>
+                    <div id="python-output-panel" class="python-output-panel">
+                        <div id="python-output-drag-handle" class="python-output-drag-handle"></div>
                         <div id="interactive-python-output"># Output will appear here...</div>
                     </div>
                 </div>
@@ -390,7 +376,15 @@
                     <button id="toggle-python-output-btn">Show Output</button>
                 </div>
             </div>
+
+            <div id="hierarchy-tab-content" class="tab-content">
+                <input type="text" id="hierarchy-search-input" placeholder="Search by name, text, ID, desc...">
+                <div class="tab-panel-header" style="margin-top: 8px;">
+                    <span>Element Tree</span>
+                </div>
+                <div id="hierarchy-tree-view">Select a device and load hierarchy...</div>
             </div>
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
@@ -406,23 +400,36 @@
     <script src="/static/local_inspector.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // console.log("DEMO_HTML_LOG: DOMContentLoaded event fired from inline script in demo.html.");
-
             const toggleBtn = document.getElementById('toggle-device-select-btn');
             const deviceMenu = document.getElementById('device-selection-area-collapsible');
             if (toggleBtn && deviceMenu) {
                 toggleBtn.addEventListener('click', function() { deviceMenu.classList.toggle('collapsed'); });
             } else { console.warn("DEMO_HTML_LOG: Toggle device select button or menu not found."); }
 
-            try {
-                const defaultPropertiesTabButton = document.querySelector("#properties-panel-tabs .tab-button.active");
-                if (defaultPropertiesTabButton && typeof window.openPropertiesTab === 'function') {
-                    const defaultTabName = defaultPropertiesTabButton.getAttribute('onclick').match(/openPropertiesTab\(event, ['"]([^'"]+)['"]\)/)[1];
-                    if (defaultTabName) window.openPropertiesTab({ currentTarget: defaultPropertiesTabButton }, defaultTabName);
-                } else { /* ... fallback tab logic ... */ }
-            } catch (e) { console.error("DEMO_HTML_LOG: Error during default properties tab initialization:", e); }
+            function initializePropertiesPanelDefaultTab() {
+                if (typeof window.openPropertiesTab === 'function') {
+                    try {
+                        const defaultPropertiesTabButton = document.querySelector("#properties-panel-tabs .tab-button.active");
+                        if (defaultPropertiesTabButton) {
+                            const defaultTabNameMatch = defaultPropertiesTabButton.getAttribute('onclick')?.match(/openPropertiesTab\(event, ['"]([^'"]+)['"]\)/);
+                            if (defaultTabNameMatch && defaultTabNameMatch[1]) {
+                                 window.openPropertiesTab({ currentTarget: defaultPropertiesTabButton }, defaultTabNameMatch[1]);
+                            } else {
+                                console.warn("DEMO_HTML_LOG: Could not determine default tab name for properties panel from active button.");
+                            }
+                        } else {
+                             console.warn("DEMO_HTML_LOG: No active default tab button found for properties panel.");
+                        }
+                    } catch (e) {
+                        console.error("DEMO_HTML_LOG: Error during default properties tab initialization:", e);
+                    }
+                } else {
+                    console.warn("DEMO_HTML_LOG: window.openPropertiesTab is not defined. Properties panel default tab not set by demo.html script.");
+                }
+            }
 
-            // --- Python Console Resizer and Toggle Setup ---
+            setTimeout(initializePropertiesPanelDefaultTab, 100); // Small delay for other scripts to load
+
             function setupPythonConsoleResizer() {
                 const pythonTabContent = document.getElementById('python-tab-content');
                 if (!pythonTabContent) {
@@ -435,21 +442,17 @@
                 const toggleButton = pythonTabContent.querySelector('#toggle-python-output-btn');
                 const pythonToolbar = pythonTabContent.querySelector('.python-toolbar');
 
-
                 if (!editorArea || !outputPanel || !dragHandle || !toggleButton || !pythonToolbar) {
                     console.error("Python console UI elements for resizing/toggling not all found. Aborting resizer setup.");
                     return;
                 }
 
-                let isOutputPanelOpen = false; // Default to closed
-                const defaultOpenHeight = 200; // px
-                const collapsedHeight = 0; // px
+                let isOutputPanelOpen = false;
+                const defaultOpenHeight = 200;
+                const collapsedHeight = 0;
                 let currentPanelHeight = defaultOpenHeight;
 
                 function applyPanelState(shouldBeOpen, newHeight) {
-                    // The output panel is positioned absolutely within python-editor-area
-                    // The toolbar is separate at the bottom of python-tab-content
-
                     if (shouldBeOpen) {
                         outputPanel.classList.add('open');
                         let targetHeight = newHeight !== undefined ? newHeight : currentPanelHeight;
@@ -463,10 +466,10 @@
 
                     if (window.PythonConsoleManager && typeof window.PythonConsoleManager.refresh === 'function') {
                         setTimeout(() => {
-                            if (pythonTabContent.classList.contains('active')) { // Only refresh if tab is active
+                            if (pythonTabContent.classList.contains('active')) {
                                 window.PythonConsoleManager.refresh();
                             }
-                        }, 50); // Refresh after layout settles
+                        }, 50);
                     }
                 }
 
@@ -475,7 +478,7 @@
 
                 const storedOpenState = localStorage.getItem('pythonOutputPanelOpen');
                 if (storedOpenState !== null) isOutputPanelOpen = storedOpenState === 'true';
-                
+
                 applyPanelState(isOutputPanelOpen, currentPanelHeight);
 
                 toggleButton.addEventListener('click', () => {
@@ -511,12 +514,11 @@
                     const deltaY = startY_drag - e.clientY;
                     let newHeight = initialDragHeight_drag + deltaY;
                     const minHeight = 60;
-                    // Max height relative to the editor area it overlays
-                    const maxAllowedHeight = editorArea.clientHeight - 30; // Leave 30px of editor visible
-                    
+                    const maxAllowedHeight = editorArea.clientHeight - 30;
+
                     newHeight = Math.max(minHeight, Math.min(newHeight, maxAllowedHeight));
                     outputPanel.style.height = `${newHeight}px`;
-                    currentPanelHeight = newHeight; 
+                    currentPanelHeight = newHeight;
 
                     if (window.PythonConsoleManager?.refresh && pythonTabContent.classList.contains('active')) {
                        window.PythonConsoleManager.refresh();
@@ -536,11 +538,7 @@
                     }
                 });
             }
-            // --- End Python Console Resizer ---
-
-            setupPythonConsoleResizer(); // Call the setup function
-
-            // console.log("DEMO_HTML_LOG: Inline DOMContentLoaded script in demo.html finished.");
+            setupPythonConsoleResizer();
         });
     </script>
     <style>
