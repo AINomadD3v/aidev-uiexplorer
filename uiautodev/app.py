@@ -5,11 +5,11 @@ import logging
 import os
 import platform
 import signal
-import sys  # Import sys to access sys.path
+import sys
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-import jedi
+import jedi  # Keep if used, otherwise can be removed if Python completions aren't a focus
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -29,9 +29,17 @@ DOTENV_PATH = PROJECT_ROOT / ".env"
 
 if DOTENV_PATH.exists():
     load_dotenv(dotenv_path=DOTENV_PATH, override=True, verbose=False)
-else:
-    print(
-        f"WARNING: app.py - .env file not found at {DOTENV_PATH}. "
+# Ensure logging is configured before other modules that might log
+logging.basicConfig(
+    level=os.getenv("UIAUTODEV_LOG_LEVEL", "info").upper(),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)  # Define logger early
+
+if not DOTENV_PATH.exists():
+    logger.warning(
+        f"app.py - .env file not found at {DOTENV_PATH}. "
         "Relying on system environment variables or defaults."
     )
 # --- End of early .env loading ---
@@ -41,13 +49,13 @@ from uiautodev.common import convert_bytes_to_image, ocr_image
 from uiautodev.model import Node
 from uiautodev.provider import AndroidProvider
 from uiautodev.router.device import make_router
+
+# Ensure correct import path if ChatMessageContent from llm_service is LlmServiceChatMessage
 from uiautodev.services.llm_service import ChatMessageContent as LlmServiceChatMessage
 from uiautodev.services.llm_service import (
     LlmServiceChatRequest,
     generate_chat_completion_stream,
 )
-
-logger = logging.getLogger(__name__)
 
 # --- FastAPI App Initialization ---
 app = FastAPI(
@@ -62,8 +70,8 @@ static_files_path = current_file_dir / "static"
 if static_files_path.is_dir():
     app.mount("/static", StaticFiles(directory=static_files_path), name="static")
 else:
-    print(
-        f"ERROR: app.py - Static files directory not found at: {static_files_path}. UI may not load correctly."
+    logger.error(
+        f"Static files directory not found at: {static_files_path}. UI may not load correctly."
     )
 
 # --- Middleware ---
@@ -91,12 +99,12 @@ class InfoResponse(BaseModel):
     drivers: List[str]
 
 
-class ApiChatMessage(BaseModel):
+class ApiChatMessage(BaseModel):  # For frontend<->uiautodev API
     role: str
     content: str
 
 
-class ApiLlmChatRequest(BaseModel):
+class ApiLlmChatRequest(BaseModel):  # For frontend<->uiautodev API
     prompt: str
     context: Dict[str, Any] = {}
     history: List[ApiChatMessage] = []
@@ -109,9 +117,7 @@ class PythonCompletionRequest(BaseModel):
     code: str
     line: int
     column: int
-    filename: Optional[str] = (
-        "inspector_code.py"  # Provide a consistent, albeit virtual, filename
-    )
+    filename: Optional[str] = "inspector_code.py"
 
 
 class PythonCompletionSuggestion(BaseModel):
@@ -120,71 +126,52 @@ class PythonCompletionSuggestion(BaseModel):
     type: Optional[str] = None
 
 
+# --- NEW: Model for Service Configurations ---
+class ServiceConfigResponse(BaseModel):
+    ragApiBaseUrl: Optional[str] = None
+
+
+# ------------------------------------------
+
 # --- Python Completion API Endpoint ---
-# Initialize a Jedi project. This can be done once if the project path and sys.path don't change.
-# For an interactive console that doesn't have a fixed "project root" for user code,
-# using the CWD of the server and the server's sys.path is a reasonable default.
 try:
-    # Using the parent of the 'uiautodev' directory as the project root for Jedi.
-    # This might help Jedi resolve things if your 'uiautodev' package is part of a larger structure
-    # or if you have other local modules you might want to complete.
-    # If your console code is mostly self-contained or uses stdlib/installed packages,
-    # os.getcwd() might also work fine as a project_path.
     jedi_project_path = str(PROJECT_ROOT)
     logger.info(
         f"Initializing Jedi Project with path: {jedi_project_path} and current sys.path."
     )
-    # smart_sys_path=True allows Jedi to try and find virtualenvs or other relevant paths.
     jedi_project = jedi.Project(
         path=jedi_project_path, sys_path=sys.path, smart_sys_path=True
     )
-    logger.info(f"Jedi Project sys.path: {jedi_project.sys_path}")
+    # logger.info(f"Jedi Project sys.path: {jedi_project.sys_path}") # Can be verbose
 except Exception as e:
     logger.error(f"Failed to initialize Jedi Project: {e}", exc_info=True)
-    jedi_project = None  # Fallback if project initialization fails
+    jedi_project = None
 
 
 @app.post("/api/python/completions", response_model=List[PythonCompletionSuggestion])
 async def get_python_completions(request_data: PythonCompletionRequest):
-    # logger.info(f"Completion req: line={request_data.line}, col={request_data.column}, file='{request_data.filename}'")
-    # logger.debug(f"Code for completion (first 100): {request_data.code[:100]}")
-
     if not jedi_project:
         logger.error("Jedi project not initialized, cannot provide completions.")
         return []
-
     try:
-        jedi_line = request_data.line + 1  # Jedi is 1-based for lines
-        jedi_column = request_data.column  # Jedi is 0-based for columns
-
-        # Create a script object within the context of our pre-initialized project
+        jedi_line = request_data.line + 1
+        jedi_column = request_data.column
         script = jedi.Script(
             code=request_data.code, path=request_data.filename, project=jedi_project
         )
         completions = script.complete(line=jedi_line, column=jedi_column)
-
-        # logger.info(f"Jedi returned {len(completions)} raw completions.")
-
         suggestions = []
         if completions:
-            for comp_index, comp in enumerate(completions):
-                # logger.debug(f"  Raw Jedi comp #{comp_index}: name='{comp.name}', type='{comp.type}', complete='{getattr(comp, 'complete', '')}'")
-
-                display_text_value = getattr(
-                    comp, "name_with_symbols", None
-                )  # Access as property
-                display_text = display_text_value if display_text_value else comp.name
-                text_to_insert = getattr(
-                    comp, "complete", comp.name
-                )  # .complete is a property giving the text to insert
-
-                suggestion = PythonCompletionSuggestion(
-                    text=text_to_insert, displayText=display_text, type=comp.type
+            for comp in completions:
+                display_text_value = getattr(comp, "name_with_symbols", comp.name)
+                text_to_insert = getattr(comp, "complete", comp.name)
+                suggestions.append(
+                    PythonCompletionSuggestion(
+                        text=text_to_insert,
+                        displayText=display_text_value,
+                        type=comp.type,
+                    )
                 )
-                suggestions.append(suggestion)
-
-        # if not suggestions: logger.info("No suggestions formatted for client.")
-        # else: logger.info(f"Formatted {len(suggestions)} suggestions.")
         return suggestions
     except Exception as e:
         logger.error(f"Error during Jedi completion processing: {e}", exc_info=True)
@@ -193,14 +180,14 @@ async def get_python_completions(request_data: PythonCompletionRequest):
 
 # --- LLM Chat API Endpoint ---
 @app.post("/api/llm/chat")
-# ... (LLM chat endpoint code remains unchanged) ...
 async def handle_llm_chat_via_service(
     client_request_data: ApiLlmChatRequest, http_request: Request
 ):
-    client_host = http_request.client.host if http_request.client else "unknown"
-    # logger.info(f"LLM Chat: {client_request_data.prompt[:70]}... from {client_host}")
+    # Convert ApiChatMessage to LlmServiceChatMessage for the service layer
     service_history = [
-        LlmServiceChatMessage(role=msg.role, content=msg.content)
+        LlmServiceChatMessage(
+            role=msg.role, content=msg.content
+        )  # Make sure LlmServiceChatMessage takes these
         for msg in client_request_data.history
     ]
     service_request_data = LlmServiceChatRequest(
@@ -219,8 +206,8 @@ async def handle_llm_chat_via_service(
 
 # --- Core API Endpoints (Info, OCR) ---
 @app.get("/api/info", response_model=InfoResponse)
-# ... (get_application_info code remains unchanged) ...
 def get_application_info() -> InfoResponse:
+    # ... (implementation unchanged) ...
     return InfoResponse(
         version=__version__,
         description="Local uiautodev server.",
@@ -232,8 +219,8 @@ def get_application_info() -> InfoResponse:
 
 
 @app.post("/api/ocr_image", response_model=List[Node])
-# ... (perform_ocr_on_image code remains unchanged) ...
 async def perform_ocr_on_image(file: UploadFile = File(...)) -> List[Node]:
+    # ... (implementation unchanged) ...
     try:
         image_data = await file.read()
         image = convert_bytes_to_image(image_data)
@@ -251,18 +238,38 @@ async def perform_ocr_on_image(file: UploadFile = File(...)) -> List[Node]:
                 logger.warning(f"Error closing OCR file: {e_close}")
 
 
+# --- NEW: Endpoint to provide service configurations to frontend ---
+RAG_API_SEARCH_URL_FROM_ENV = os.getenv(
+    "COCOINDEX_SEARCH_API_URL", "http://localhost:8000/search"
+)
+RAG_API_BASE_URL_FOR_FRONTEND = RAG_API_SEARCH_URL_FROM_ENV
+if RAG_API_BASE_URL_FOR_FRONTEND.endswith("/search"):
+    RAG_API_BASE_URL_FOR_FRONTEND = RAG_API_BASE_URL_FOR_FRONTEND[: -len("/search")]
+
+
+@app.get("/api/config/services", response_model=ServiceConfigResponse)
+async def get_service_configurations():
+    logger.info(
+        f"Providing RAG API base URL to frontend: {RAG_API_BASE_URL_FOR_FRONTEND}"
+    )
+    return ServiceConfigResponse(ragApiBaseUrl=RAG_API_BASE_URL_FOR_FRONTEND)
+
+
+# --------------------------------------------------------------------
+
+
 # --- Server Control and Static Content ---
 @app.get("/shutdown", summary="Shutdown Server")
-# ... (shutdown_server code remains unchanged) ...
 def shutdown_server() -> JSONResponse:
+    # ... (implementation unchanged) ...
     logger.info("Shutdown endpoint called. Sending SIGINT to process %d.", os.getpid())
     os.kill(os.getpid(), signal.SIGINT)
     return JSONResponse(content={"message": "Server shutting down..."})
 
 
 @app.get("/demo", summary="Serve Local Inspector UI", include_in_schema=True)
-# ... (serve_local_inspector_ui code remains unchanged) ...
 async def serve_local_inspector_ui():
+    # ... (implementation unchanged) ...
     ui_html_file = static_files_path / "demo.html"
     if not ui_html_file.is_file():
         logger.error(f"UI HTML file not found: {ui_html_file}")
@@ -271,8 +278,8 @@ async def serve_local_inspector_ui():
 
 
 @app.get("/", summary="Redirect to Local Inspector UI", include_in_schema=False)
-# ... (redirect_to_local_ui code remains unchanged) ...
 async def redirect_to_local_ui():
+    # ... (implementation unchanged) ...
     try:
         local_ui_url = app.url_path_for("serve_local_inspector_ui")
     except Exception:
@@ -282,7 +289,7 @@ async def redirect_to_local_ui():
 
 # --- Main Entry Point for Uvicorn ---
 if __name__ == "__main__":
-    # ... (Uvicorn setup code remains largely unchanged, ensure logging is configured before Jedi Project init if Jedi is moved here) ...
+    # Logging is configured at the top of the file now
     server_port = int(os.getenv("UIAUTODEV_PORT", "20242"))
     server_host = os.getenv("UIAUTODEV_HOST", "127.0.0.1")
     reload_enabled = os.getenv("UIAUTODEV_RELOAD", "True").lower() in (
@@ -290,24 +297,9 @@ if __name__ == "__main__":
         "1",
         "yes",
     )
-    log_level_str = os.getenv("UIAUTODEV_LOG_LEVEL", "info").lower()
-
-    numeric_log_level = getattr(logging, log_level_str.upper(), logging.INFO)
-    if not isinstance(numeric_log_level, int):
-        print(
-            f"WARNING: Invalid UIAUTODEV_LOG_LEVEL: {log_level_str}. Defaulting to INFO."
-        )
-        numeric_log_level = logging.INFO
-
-    logging.basicConfig(
-        level=numeric_log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    # It's important that Jedi Project initialization log appears after basicConfig is set,
-    # so moving the jedi_project initialization from module level to here might be an idea
-    # if there are issues with its own logging. For now, keeping it at module level for simplicity.
-    # If jedi_project failed, logger.error would have been called.
+    log_level_str = os.getenv(
+        "UIAUTODEV_LOG_LEVEL", "info"
+    ).lower()  # Uvicorn's log_level uses this string
 
     logger.info(
         f"Starting uiautodev server v{__version__} on http://{server_host}:{server_port}"
@@ -316,9 +308,9 @@ if __name__ == "__main__":
         logger.info(f"Loaded .env from: {DOTENV_PATH}")
     else:
         logger.warning(f".env not found at {DOTENV_PATH}. Secrets might be missing.")
-    if not jedi_project:  # Log if Jedi project failed to init earlier
+    if not jedi_project:
         logger.error(
-            "Jedi project could not be initialized. Python completions might be degraded or unavailable."
+            "Jedi project could not be initialized. Python completions might be degraded."
         )
 
     uvicorn.run(
@@ -326,5 +318,5 @@ if __name__ == "__main__":
         host=server_host,
         port=server_port,
         reload=reload_enabled,
-        log_level=log_level_str,
+        log_level=log_level_str,  # Use the string for Uvicorn's log_level
     )
