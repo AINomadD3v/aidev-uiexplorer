@@ -47,3 +47,38 @@ class WindowSize(typing.NamedTuple):
 class AppInfo(BaseModel):
     packageName: str
 
+
+class ToolCallFunction(BaseModel):
+    name: Optional[str] = None
+    arguments: Optional[str] = None
+
+
+class ToolCall(BaseModel):
+    id: Optional[str] = None
+    type: str = "function"
+    function: ToolCallFunction
+
+
+class ChatMessageDelta(BaseModel):
+    role: Optional[str] = None
+    content: Optional[str] = None
+    tool_calls: Optional[List[ToolCall]] = None
+
+
+class ChatMessageContent(BaseModel):
+    role: str
+    content: Union[str, List[Dict[str, Any]]]
+    name: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    tool_calls: Optional[List[ToolCall]] = None
+
+
+class LlmServiceChatRequest(BaseModel):
+    prompt: str
+    context: Dict[str, Any] = {}
+    history: List[ChatMessageContent] = []
+    model: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    # tools: Optional[List[Dict[str, Any]]] = None
+    # tool_choice: Optional[Union[str, Dict[str, Any]]] = None

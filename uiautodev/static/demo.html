@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local App Inspector (uiautodev) - Dark</title>
+    <title>UiAgent Inspector - Dark</title>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
@@ -24,18 +24,49 @@
         body {
             font-family: var(--font-family-main); margin: 0; padding: 0; display: flex; flex-direction: column;
             height: 100vh; background-color: var(--dark-bg-primary); color: var(--dark-text-primary); font-size: 13px;
+            /* Add padding-top if message-area is fixed and overlaps */
+            padding-top: 0; /* Will be adjusted by JS if message area is shown */
         }
+
+        /* --- MODIFIED: Header --- */
         header {
-            background-color: var(--dark-bg-secondary); color: var(--dark-text-primary); padding: 10px 20px; text-align: center;
-            border-bottom: 1px solid var(--dark-border-primary); flex-shrink: 0;
+            background-color: var(--dark-bg-secondary);
+            color: var(--dark-text-primary);
+            padding: 6px 15px; /* Made skinnier */
+            /* text-align: center; /* Removed for flex layout */
+            border-bottom: 1px solid var(--dark-border-primary);
+            flex-shrink: 0;
+            display: flex; /* For title and RAG status */
+            justify-content: space-between;
+            align-items: center;
+            height: 40px; /* Example fixed height, adjust as needed */
         }
-        header h1 { margin: 0; font-size: 1.25em; font-weight: 500; }
+        header h1 {
+            margin: 0;
+            font-size: 1.1em; /* Slightly adjusted */
+            font-weight: 500;
+        }
+
+        /* --- MODIFIED: Message Area (Notification) --- */
         #message-area {
-            padding: 8px 15px; text-align: center; background-color: var(--dark-bg-tertiary);
-            color: var(--dark-text-secondary); font-size: 0.9em; display: none;
-            position: fixed; bottom: 0; left: 0; width: 100%;
-            z-index: 10000; border-top: 1px solid var(--dark-border-primary);
+            padding: 8px 15px;
+            text-align: center;
+            background-color: var(--dark-bg-tertiary);
+            color: var(--dark-text-secondary);
+            font-size: 0.9em;
+            display: none; /* Initially hidden, shown by JS */
+            position: fixed; /* Fixed at the top */
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 10000; /* Ensure it's on top of other content */
+            border-bottom: 1px solid var(--dark-border-primary); /* Border at the bottom now */
+            /* If header is also fixed, this needs to be handled carefully or body needs padding-top */
         }
+        body.message-visible { /* Class to add to body when message is shown */
+            padding-top: 35px; /* Adjust to height of message-area */
+        }
+
 
         .main-container { display: flex; flex-grow: 1; overflow: hidden; padding: 8px; gap: 8px; }
         .panel {
@@ -63,14 +94,21 @@
         #device-select { width: 100%; padding: 7px 10px; background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; font-size: 0.9em; }
         #device-select:focus { border-color: var(--dark-accent-primary); outline: none; box-shadow: 0 0 0 1px var(--dark-accent-primary); }
 
-        .device-screen-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; min-height: 250px; position: relative; background-color: #000; border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+        .device-screen-container {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 250px;
+            position: relative;
+            background-color: #000;
+            border-radius: 4px;
+            overflow: hidden;
+        }
         #current-device-screen, #overlayCanvas { max-width: 100%; max-height: 100%; height: auto; width: auto; border-radius: 0px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
         #current-device-screen { border: none; z-index: 1; }
         #overlayCanvas { z-index: 2; cursor: crosshair; }
 
-        .device-controls { text-align: center; padding-top: 10px; border-top: 1px solid var(--dark-border-secondary); display: flex; justify-content: space-around; gap: 8px; flex-shrink: 0; }
-        .device-controls button { padding: 7px 10px; font-size: 0.85em; border: 1px solid var(--dark-border-primary); background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border-radius: 4px; cursor: pointer; transition: background-color 0.2s ease, border-color 0.2s ease; flex-grow: 1; }
-        .device-controls button:hover { background-color: var(--dark-accent-hover); border-color: var(--dark-accent-primary); color: white; }
 
         .tabs { display: flex; margin-bottom: 0; border-bottom: 1px solid var(--dark-border-primary); flex-shrink: 0; background-color: var(--dark-bg-secondary) }
         .tab-button { padding: 8px 14px; cursor: pointer; background-color: transparent; border: none; border-bottom: 2px solid transparent; color: var(--dark-text-secondary); transition: color 0.2s ease, border-color 0.2s ease; margin-right: 1px; font-size: 0.9em; white-space: nowrap; }
@@ -129,7 +167,7 @@
         
         .llm-context-controls-area {
             position: relative;
-            padding: 0 8px;    
+            padding: 0 8px;     
             flex-shrink: 0;
         }
         .llm-context-actions-bar {
@@ -141,55 +179,83 @@
             border-top: 1px solid var(--dark-border-primary);
         }
         
-        /* --- Styles for RAG API Status Indicator --- */
-        .rag-api-status-container { /* NEW container */
+        /* --- MODIFIED: RAG API Status Indicator (in header) --- */
+        header .rag-api-status-container { /* Style for when it's in the header */
             display: flex;
             align-items: center;
-            padding: 4px 8px; /* Adjust padding to look like a button/badge */
+            padding: 3px 6px; /* Smaller padding for header */
             border: 1px solid var(--dark-border-primary);
             border-radius: 4px;
             background-color: var(--dark-bg-tertiary);
-            font-size: 0.8em; /* Smaller text for status */
+            font-size: 0.75em; /* Smaller font for header */
             color: var(--dark-text-secondary);
-            cursor: default; /* It's an indicator, not a button */
-            margin-left: 8px; /* Spacing from the "Context" button */
-            /* margin-right: auto; /* REMOVED: Pushed clear chat too far */
+            cursor: default; 
+            margin-left: 10px; /* Space from title */
         }
 
-        #rag-api-status-indicator { /* The dot itself */
+        header #rag-api-status-indicator { /* Dot itself in header */
+            width: 7px; 
+            height: 7px;
+            margin-right: 5px;
+            /* Other properties inherited or default */
+        }
+         /* Original RAG status styles for when it's NOT in header (if it ever moves back) */
+        .llm-context-actions-bar .rag-api-status-container {
+             display: flex;
+             align-items: center;
+             padding: 4px 8px; 
+             border: 1px solid var(--dark-border-primary);
+             border-radius: 4px;
+             background-color: var(--dark-bg-tertiary);
+             font-size: 0.8em; 
+             color: var(--dark-text-secondary);
+             cursor: default;
+        }
+         .llm-context-actions-bar #rag-api-status-indicator {
             display: inline-block;
-            width: 8px;   /* Slightly smaller dot */
+            width: 8px;  
             height: 8px;
             border-radius: 50%;
-            background-color: #888; /* Default/Unknown: Grey */
-            margin-right: 6px;     /* Space between dot and text */
-            transition: background-color 0.3s ease; /* Smoother transition */
-            flex-shrink: 0; /* Prevent dot from shrinking */
+            background-color: #888; 
+            margin-right: 6px;    
+            transition: background-color 0.3s ease; 
+            flex-shrink: 0; 
         }
+
+
         #rag-api-status-indicator.status-ok {
-            background-color: var(--dark-success); /* Green */
+            background-color: var(--dark-success); 
         }
         #rag-api-status-indicator.status-error {
-            background-color: var(--dark-error); /* Red */
+            background-color: var(--dark-error); 
         }
         #rag-api-status-indicator.status-degraded {
-            background-color: var(--dark-warning); /* Yellow */
+            background-color: var(--dark-warning); 
         }
-        #rag-api-status-text { /* NEW: Text next to the dot */
-            line-height: 1; /* Align text better with the small dot */
+        #rag-api-status-text { 
+            line-height: 1; 
         }
         /* --- END RAG API Status Indicator Styles --- */
 
-        .llm-context-toggle-btn {
+        .llm-context-toggle-btn, #llm-include-last-error-btn { 
             display: flex;
             align-items: center;
             gap: 4px;
             background-color: var(--dark-bg-tertiary); 
             border: 1px solid var(--dark-border-primary);
         }
-        .llm-context-toggle-btn:hover {
+        .llm-context-toggle-btn:hover, #llm-include-last-error-btn:hover {
             background-color: var(--dark-bg-hover);
         }
+        #llm-include-last-error-btn.active { 
+            background-color: var(--dark-warning);
+            color: var(--dark-bg-primary);
+            border-color: var(--dark-warning);
+        }
+        #llm-include-last-error-btn.active:hover {
+             background-color: #ffae00; 
+        }
+
         .llm-context-toggle-icon {
             font-size: 0.8em; 
             color: var(--dark-text-placeholder);
@@ -203,7 +269,7 @@
             background-color: var(--dark-bg-tertiary); 
             border: 1px solid var(--dark-border-primary);
             color: var(--dark-text-primary);
-            margin-left: auto; /* Pushes Clear Chat to the far right */
+            margin-left: auto; 
         }
         #llm-clear-conversation-btn.small-button:hover {
             background-color: var(--dark-error);
@@ -397,9 +463,14 @@
         }
     </style>
 </head>
-<body class="dark-theme">
-    <header><h1>Local App Inspector</h1></header>
-    <div id="message-area" style="display: none;">Initializing...</div>
+<body class="dark-theme"> <div id="message-area" style="display: none;">Initializing...</div>
+    <header>
+        <h1>UiAgent</h1>
+        <div id="rag-api-status-container" class="rag-api-status-container">
+            <span id="rag-api-status-indicator"></span>
+            <span id="rag-api-status-text">RAG Status</span>
+        </div>
+    </header>
 
     <div class="main-container">
         <div id="panel-device-view" class="panel">
@@ -419,11 +490,6 @@
                     <img id="current-device-screen" src="https://placehold.co/320x680/1e1e1e/777?text=Device+Screen" alt="Device Screen">
                     <canvas id="overlayCanvas"></canvas>
                 </div>
-                <div class="device-controls">
-                    <button id="refresh-screen-btn" title="Refresh Screenshot">🔄 Screen</button>
-                    <button id="device-home-btn" title="Press Home Button">🏠 Home</button>
-                    <button id="device-back-btn" title="Press Back Button">⬅️ Back</button>
-                </div>
             </div>
         </div>
 
@@ -442,10 +508,7 @@
                                 <button id="attach-context-toggle-btn" class="llm-context-toggle-btn small-button">
                                     <span class="llm-context-toggle-icon">▲</span> Context
                                 </button>
-                                <div id="rag-api-status-container" class="rag-api-status-container">
-                                    <span id="rag-api-status-indicator"></span>
-                                    <span id="rag-api-status-text">RAG Status</span>
-                                </div>
+                                <button id="llm-include-last-error-btn" class="small-button" title="Capture the last Python error from the console and include it in the next message to the assistant.">❗ Include Error</button>
                                 <button id="llm-clear-conversation-btn" class="small-button">Clear Chat</button>
                             </div>
                             <div id="attach-context-panel" class="llm-context-panel-upwards collapsed">
@@ -535,6 +598,27 @@
     <script src="/static/local_inspector.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // JS to manage message area visibility and body padding
+            const messageArea = document.getElementById('message-area');
+            // Example of how you might show/hide the message area from other JS modules
+            // window.showMessage = (text, type = 'info', duration = 3000) => {
+            //     messageArea.textContent = text;
+            //     messageArea.style.backgroundColor = type === 'error' ? 'var(--dark-error)' : type === 'warning' ? 'var(--dark-warning)' : 'var(--dark-bg-tertiary)';
+            //     messageArea.style.display = 'block';
+            //     document.body.classList.add('message-visible'); // Add class to body
+            //     if (duration > 0) {
+            //         setTimeout(() => {
+            //             messageArea.style.display = 'none';
+            //             document.body.classList.remove('message-visible'); // Remove class
+            //         }, duration);
+            //     }
+            // };
+            // window.hideMessage = () => {
+            //    messageArea.style.display = 'none';
+            //    document.body.classList.remove('message-visible');
+            // };
+
+
             const toggleBtn = document.getElementById('toggle-device-select-btn');
             const deviceMenu = document.getElementById('device-selection-area-collapsible');
             if (toggleBtn && deviceMenu) {
@@ -624,7 +708,7 @@
                     } else {
                         const currentHeightBeforeClose = parseInt(outputPanel.style.height, 10);
                         if (currentHeightBeforeClose > 60) {
-                            localStorage.setItem('pythonOutputPanelHeight', currentHeightBeforeClose);
+                             localStorage.setItem('pythonOutputPanelHeight', currentHeightBeforeClose);
                         }
                         applyPanelState(false);
                     }
@@ -655,7 +739,7 @@
                     currentPanelHeight = newHeight;
 
                     if (window.PythonConsoleManager?.refresh && pythonTabContent.classList.contains('active')) {
-                        window.PythonConsoleManager.refresh();
+                         window.PythonConsoleManager.refresh();
                     }
                 });
 
