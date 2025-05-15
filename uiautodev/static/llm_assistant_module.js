@@ -1,14 +1,12 @@
 // static/llm_assistant_module.js
-// console.log("LLM_MOD_LOG: llm_assistant_module.js script started loading.");
 
 window.LlmAssistantModule = (function () {
-  // console.log("LLM_MOD_LOG: LlmAssistantModule IIFE invoked.");
   // --- Private Variables ---
   let llmConversationHistory = [];
   let dependencies = {
     getAppVariables: () => {
       return {
-        selectedNode: null,
+        selectedElements: null,
         currentHierarchyData: null,
         currentDeviceSerial: null,
         devices: [],
@@ -17,10 +15,8 @@ window.LlmAssistantModule = (function () {
         generatedXpathValue: "",
       };
     },
-    PythonConsoleManager: null, // Expected to have getOutput(), getCode(), setCode(), and NEW: getLastTraceback()
-    updateMessage: (text, type, duration) => {
-      // console.log(`LLM_MOD_LOG: updateMessage dependency called with: ${type} - ${text}`);
-    },
+    PythonConsoleManager: null,
+    updateMessage: (text, type, duration) => {},
     callBackend: async (method, endpoint, body) => {
       console.warn(
         "LLM_MOD_WARN: LLM_callBackend dependency used (should be rare).",
@@ -36,9 +32,7 @@ window.LlmAssistantModule = (function () {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;"),
-    openGlobalTab: (evt, tabName) => {
-      // console.log(`LLM_MOD_LOG: openGlobalTab dependency called for ${tabName}`);
-    },
+    openGlobalTab: (evt, tabName) => {},
   };
 
   // DOM Elements
@@ -53,49 +47,24 @@ window.LlmAssistantModule = (function () {
     llmContextPythonCodeCheckbox,
     llmContextDeviceInfoCheckbox;
 
-  // --- MODIFIED: Added button for "Include Last Error" ---
   let llmIncludeLastErrorBtn;
-  let capturedLastErrorForNextPrompt = null; // Stores the error string if captured
+  let capturedLastErrorForNextPrompt = null;
 
-  // RAG API Status Variables
-  let ragApiStatusIndicatorEl; // For the dot in the header
-  let ragApiStatusTextEl; // For the text next to the dot in the header
+  let ragApiStatusIndicatorEl;
+  let ragApiStatusTextEl;
   let RAG_API_HEALTH_URL = null;
   let ragApiPollIntervalId = null;
 
-  // --- Private Functions ---
+  let currentSelectedNodesForLlm = null;
 
   function _fetchLlmDomElements() {
-    // console.log("LLM_MOD_LOG: _fetchLlmDomElements() called.");
-    let allCriticalFound = true;
-
     llmChatHistoryEl = document.getElementById("llm-chat-history");
-    if (!llmChatHistoryEl) {
-      console.error("LLM_MOD_ERR: 'llm-chat-history' NOT FOUND!");
-      allCriticalFound = false;
-    }
-
     llmPromptInputEl = document.getElementById("llm-prompt-input");
-    if (!llmPromptInputEl) {
-      console.error("LLM_MOD_ERR: 'llm-prompt-input' NOT FOUND!");
-      allCriticalFound = false;
-    }
-
     llmSendPromptBtn = document.getElementById("llm-send-prompt-btn");
-    if (!llmSendPromptBtn) {
-      console.error("LLM_MOD_ERR: 'llm-send-prompt-btn' NOT FOUND!");
-      allCriticalFound = false;
-    }
-
     llmClearConversationBtn = document.getElementById(
       "llm-clear-conversation-btn",
     );
-    if (!llmClearConversationBtn) {
-      console.error("LLM_MOD_ERR: 'llm-clear-conversation-btn' NOT FOUND!");
-      allCriticalFound = false;
-    }
 
-    // Context panel checkboxes and select
     llmContextUiHierarchyCheckbox = document.getElementById(
       "llm-context-ui-hierarchy",
     );
@@ -114,30 +83,20 @@ window.LlmAssistantModule = (function () {
     llmContextDeviceInfoCheckbox = document.getElementById(
       "llm-context-device-info",
     );
-
-    // --- MODIFIED: Fetch "Include Last Error" button ---
     llmIncludeLastErrorBtn = document.getElementById(
       "llm-include-last-error-btn",
     );
-    if (!llmIncludeLastErrorBtn) {
-      // This is a new feature, so a warning is okay if not found during transition
-      console.warn(
-        "LLM_MOD_WARN: Optional 'llm-include-last-error-btn' element NOT FOUND!",
-      );
-    }
 
-    // Fetch RAG API Status Indicator Elements (now in header)
     ragApiStatusIndicatorEl = document.getElementById(
       "rag-api-status-indicator",
     );
-    ragApiStatusTextEl = document.getElementById("rag-api-status-text"); // Get the text span too
+    ragApiStatusTextEl = document.getElementById("rag-api-status-text");
 
-    if (!ragApiStatusIndicatorEl || !ragApiStatusTextEl) {
-      console.warn(
-        "LLM_MOD_WARN: Optional RAG API status elements ('rag-api-status-indicator' or 'rag-api-status-text') in header NOT FOUND!",
-      );
-    }
-
+    let allCriticalFound =
+      llmChatHistoryEl &&
+      llmPromptInputEl &&
+      llmSendPromptBtn &&
+      llmClearConversationBtn;
     if (!allCriticalFound && dependencies.updateMessage) {
       dependencies.updateMessage(
         "LLM Chat UI failed to load critical elements.",
@@ -145,10 +104,18 @@ window.LlmAssistantModule = (function () {
         0,
       );
     }
+    if (!llmIncludeLastErrorBtn)
+      console.warn(
+        "LLM_MOD_WARN: 'llm-include-last-error-btn' element NOT FOUND!",
+      );
+    if (!ragApiStatusIndicatorEl || !ragApiStatusTextEl)
+      console.warn(
+        "LLM_MOD_WARN: RAG API status elements in header NOT FOUND!",
+      );
+
     return allCriticalFound;
   }
 
-  // --- MODIFIED: RAG API Status Functions ---
   async function _fetchServiceConfigsAndInitRagPolling() {
     try {
       const response = await fetch("/api/config/services");
@@ -159,7 +126,7 @@ window.LlmAssistantModule = (function () {
           response.status,
           errorText,
         );
-        _setRagApiStatus("error", "Config Error"); // Simplified message for header
+        _setRagApiStatus("error", "Config Error");
         return;
       }
       const config = await response.json();
@@ -184,13 +151,12 @@ window.LlmAssistantModule = (function () {
 
   function _setRagApiStatus(statusType, detailMessage = "") {
     if (!ragApiStatusIndicatorEl || !ragApiStatusTextEl) return;
-
     ragApiStatusIndicatorEl.classList.remove(
       "status-ok",
       "status-error",
       "status-degraded",
     );
-    let statusTextContent = "RAG Status"; // Default text
+    let statusTextContent = "RAG Status";
     let tooltipText = "RAG API Status: ";
 
     if (statusType === "ok") {
@@ -210,7 +176,6 @@ window.LlmAssistantModule = (function () {
       tooltipText += `Unknown (${detailMessage || "Checking..."})`;
     }
     ragApiStatusTextEl.textContent = statusTextContent;
-    // Set title on the container for a more traditional tooltip
     if (
       ragApiStatusIndicatorEl.parentElement &&
       ragApiStatusIndicatorEl.parentElement.classList.contains(
@@ -222,30 +187,25 @@ window.LlmAssistantModule = (function () {
   }
 
   async function _checkRagApiStatus() {
-    if (!RAG_API_HEALTH_URL) {
+    if (!RAG_API_HEALTH_URL || !ragApiStatusIndicatorEl || !ragApiStatusTextEl)
       return;
-    }
-    if (!ragApiStatusIndicatorEl || !ragApiStatusTextEl) return;
-
     try {
       const response = await fetch(RAG_API_HEALTH_URL, {
         method: "GET",
         cache: "no-store",
       });
-
       if (response.ok) {
         const data = await response.json();
-        if (data.status === "ok") {
-          _setRagApiStatus("ok");
-        } else {
-          _setRagApiStatus("degraded", data.status || "Unknown");
-        }
+        _setRagApiStatus(
+          data.status === "ok" ? "ok" : "degraded",
+          data.status || "Unknown",
+        );
       } else {
         _setRagApiStatus("error", `HTTP ${response.status}`);
       }
     } catch (error) {
       console.warn(
-        "LLM_MOD_WARN: Error polling RAG API status (RAG API likely unreachable):",
+        "LLM_MOD_WARN: Error polling RAG API status:",
         error.message,
       );
       _setRagApiStatus("error", "Unreachable");
@@ -253,22 +213,18 @@ window.LlmAssistantModule = (function () {
   }
 
   function _pollRagApiStatus() {
-    if (ragApiPollIntervalId) {
-      clearInterval(ragApiPollIntervalId);
-    }
+    if (ragApiPollIntervalId) clearInterval(ragApiPollIntervalId);
     _checkRagApiStatus();
     ragApiPollIntervalId = setInterval(_checkRagApiStatus, 15000);
   }
-  // --- END RAG API Status Functions ---
 
-  // --- MODIFIED: New function to handle "Include Last Error" button click ---
   function _handleIncludeLastErrorClick() {
     if (
       !dependencies.PythonConsoleManager ||
       typeof dependencies.PythonConsoleManager.getLastTraceback !== "function"
     ) {
       console.error(
-        "LLM_MOD_ERR: PythonConsoleManager.getLastTraceback() is not available. Ensure it's implemented and passed in dependencies.",
+        "LLM_MOD_ERR: PythonConsoleManager.getLastTraceback() is not available.",
       );
       dependencies.updateMessage(
         "Error: Cannot retrieve last error (ConsoleManager misconfigured).",
@@ -277,11 +233,8 @@ window.LlmAssistantModule = (function () {
       );
       return;
     }
-
     const lastTraceback = dependencies.PythonConsoleManager.getLastTraceback();
-
     if (capturedLastErrorForNextPrompt) {
-      // If already captured, clicking again clears it
       capturedLastErrorForNextPrompt = null;
       dependencies.updateMessage(
         "Captured Python error cleared from next prompt.",
@@ -301,7 +254,7 @@ window.LlmAssistantModule = (function () {
       );
       if (llmIncludeLastErrorBtn) {
         llmIncludeLastErrorBtn.classList.add("active");
-        llmIncludeLastErrorBtn.textContent = "✔️ Error Captured"; // Indicate success
+        llmIncludeLastErrorBtn.textContent = "✔️ Error Captured";
       }
     } else {
       dependencies.updateMessage(
@@ -327,12 +280,9 @@ window.LlmAssistantModule = (function () {
     );
     const parts = html.split(/(<pre(?:.|\n)*?<\/pre>)/);
     for (let i = 0; i < parts.length; i++) {
-      if (i % 2 === 0) {
-        parts[i] = parts[i].replace(/\n/g, "<br>");
-      }
+      if (i % 2 === 0) parts[i] = parts[i].replace(/\n/g, "<br>");
     }
-    html = parts.join("");
-    return html;
+    return parts.join("");
   }
 
   function _addMessageToChatHistory(
@@ -341,12 +291,7 @@ window.LlmAssistantModule = (function () {
     isHtml = false,
     isStreaming = false,
   ) {
-    if (!llmChatHistoryEl) {
-      console.error(
-        "LLM_MOD_ERR: _addMessageToChatHistory - llmChatHistoryEl is null!",
-      );
-      return null;
-    }
+    if (!llmChatHistoryEl) return null;
     const messageDiv = document.createElement("div");
     messageDiv.classList.add("llm-message", `llm-message-${type}`);
     messageDiv.dataset.rawContent = isStreaming
@@ -354,19 +299,12 @@ window.LlmAssistantModule = (function () {
       : isHtml
         ? "HTML_CONTENT_NO_RAW"
         : initialContent;
-
-    if (isHtml) {
-      messageDiv.innerHTML = initialContent;
-    } else {
-      messageDiv.innerHTML = _formatResponseForDisplay(initialContent);
-    }
-
+    messageDiv.innerHTML = isHtml
+      ? initialContent
+      : _formatResponseForDisplay(initialContent);
     llmChatHistoryEl.appendChild(messageDiv);
     llmChatHistoryEl.scrollTop = llmChatHistoryEl.scrollHeight;
-
-    if (type === "assistant") {
-      _addCodeActionButtonsToMessage(messageDiv);
-    }
+    if (type === "assistant") _addCodeActionButtonsToMessage(messageDiv);
     return messageDiv;
   }
 
@@ -375,22 +313,21 @@ window.LlmAssistantModule = (function () {
       !messageDiv ||
       !dependencies.PythonConsoleManager ||
       typeof dependencies.PythonConsoleManager.setCode !== "function"
-    ) {
+    )
       return;
-    }
     messageDiv
       .querySelectorAll(".llm-code-action-buttons")
       .forEach((btnContainer) => btnContainer.remove());
     const preElements = messageDiv.querySelectorAll("pre");
     preElements.forEach((preElement) => {
       const codeElement = preElement.querySelector("code");
+      // Ensure codeText is just the code, trimmed of extra whitespace from HTML parsing
       const codeText = codeElement
-        ? codeElement.textContent
-        : preElement.textContent;
+        ? codeElement.textContent.trim()
+        : preElement.textContent.trim();
 
       const buttonsContainer = document.createElement("div");
       buttonsContainer.className = "llm-code-action-buttons";
-
       const copyButton = document.createElement("button");
       copyButton.textContent = "Copy";
       copyButton.className = "llm-code-copy-btn";
@@ -411,29 +348,127 @@ window.LlmAssistantModule = (function () {
             dependencies.updateMessage("Failed to copy.", "error");
           });
       });
-
       const insertButton = document.createElement("button");
       insertButton.textContent = "To Console";
       insertButton.className = "llm-code-insert-btn";
-      insertButton.title = "Insert code into Python Console";
+      insertButton.title = "Insert code into Python Console (applies diff)";
       insertButton.addEventListener("click", (e) => {
         e.stopPropagation();
-        dependencies.PythonConsoleManager.setCode(codeText);
+        applyDiffOrSetCode(codeText);
         dependencies.updateMessage(
-          "Code inserted into Python console.",
+          "Code processed for Python console.",
           "success",
           2000,
         );
-        if (dependencies.openGlobalTab) {
+        if (dependencies.openGlobalTab)
           dependencies.openGlobalTab(null, "python-tab-content");
-        }
       });
-
       buttonsContainer.appendChild(copyButton);
       buttonsContainer.appendChild(insertButton);
       preElement.style.position = "relative";
       preElement.appendChild(buttonsContainer);
     });
+  }
+
+  function applyDiffOrSetCode(newLlmScript) {
+    console.log("LLM_MOD_LOG: applyDiffOrSetCode called.");
+    if (
+      !dependencies.PythonConsoleManager ||
+      typeof dependencies.PythonConsoleManager.getCode !== "function" ||
+      typeof dependencies.PythonConsoleManager.setCode !== "function"
+    ) {
+      console.error(
+        "LLM_MOD_ERR: PythonConsoleManager getCode/setCode not available for diffing.",
+      );
+      if (
+        dependencies.PythonConsoleManager &&
+        typeof dependencies.PythonConsoleManager.setCode === "function"
+      ) {
+        dependencies.PythonConsoleManager.setCode(newLlmScript);
+      }
+      return;
+    }
+
+    const currentEditorCode = dependencies.PythonConsoleManager.getCode();
+    console.log(
+      "LLM_MOD_LOG: Current editor code (for diff):\n",
+      currentEditorCode,
+    );
+    console.log("LLM_MOD_LOG: New LLM script (for diff):\n", newLlmScript);
+
+    if (typeof diff_match_patch === "undefined") {
+      console.warn(
+        "LLM_MOD_WARN: diff_match_patch library not found. Falling back to full overwrite.",
+      );
+      dependencies.PythonConsoleManager.setCode(newLlmScript);
+      return;
+    }
+
+    try {
+      const dmp = new diff_match_patch();
+      // Ensure both texts are strings and handle potential undefined/null
+      const text1 = currentEditorCode || "";
+      const text2 = newLlmScript || "";
+
+      const diffs = dmp.diff_main(text1, text2);
+      console.log(
+        "LLM_MOD_LOG: Diffs computed:",
+        JSON.stringify(diffs.slice(0, 5)) + (diffs.length > 5 ? "..." : ""),
+      ); // Log first few diffs
+
+      dmp.diff_cleanupSemantic(diffs);
+      console.log(
+        "LLM_MOD_LOG: Diffs after cleanupSemantic:",
+        JSON.stringify(diffs.slice(0, 5)) + (diffs.length > 5 ? "..." : ""),
+      );
+
+      const patches = dmp.patch_make(text1, diffs); // Or dmp.patch_make(diffs) if text1 is implicit in diffs
+      console.log(
+        "LLM_MOD_LOG: Patches created:",
+        patches
+          .map((p) => p.toString())
+          .join("\n")
+          .substring(0, 200) + "...",
+      );
+
+      const [patchedText, results] = dmp.patch_apply(patches, text1);
+      console.log("LLM_MOD_LOG: Patch apply results:", results);
+      console.log("LLM_MOD_LOG: Patched text proposal:\n", patchedText);
+
+      let allAppliedCleanly = true;
+      for (let i = 0; i < results.length; i++) {
+        if (!results[i]) {
+          allAppliedCleanly = false;
+          break;
+        }
+      }
+
+      if (allAppliedCleanly) {
+        dependencies.PythonConsoleManager.setCode(patchedText);
+        console.log("LLM_MOD_LOG: Code updated via diff patch.");
+        dependencies.updateMessage("Code updated with changes.", "info", 2000);
+      } else {
+        console.warn(
+          "LLM_MOD_WARN: Diff patch did not apply cleanly. Results:",
+          results,
+          "Falling back to full overwrite.",
+        );
+        dependencies.PythonConsoleManager.setCode(newLlmScript);
+        dependencies.updateMessage(
+          "Code updated (full overwrite due to complex changes).",
+          "warning",
+          3000,
+        );
+      }
+    } catch (e) {
+      console.error("LLM_MOD_ERR: Error during diff_match_patch process:", e);
+      dependencies.PythonConsoleManager.setCode(newLlmScript);
+      dependencies.updateMessage(
+        "Error applying code changes, did full overwrite.",
+        "error",
+        3000,
+      );
+    }
   }
 
   function _updateStreamedMessage(messageDiv, newChunk, isComplete = false) {
@@ -442,13 +477,9 @@ window.LlmAssistantModule = (function () {
     messageDiv.innerHTML = _formatResponseForDisplay(
       messageDiv.dataset.rawContent,
     );
-    if (llmChatHistoryEl) {
+    if (llmChatHistoryEl)
       llmChatHistoryEl.scrollTop = llmChatHistoryEl.scrollHeight;
-    }
-    // Re-add buttons as innerHTML is overwritten, only at the end for efficiency
-    if (isComplete) {
-      _addCodeActionButtonsToMessage(messageDiv);
-    }
+    if (isComplete) _addCodeActionButtonsToMessage(messageDiv);
   }
 
   function _clearLlmChat() {
@@ -460,8 +491,6 @@ window.LlmAssistantModule = (function () {
     );
     if (dependencies.updateMessage)
       dependencies.updateMessage("Chat conversation cleared.", "info");
-
-    // Also clear any captured error
     capturedLastErrorForNextPrompt = null;
     if (llmIncludeLastErrorBtn) {
       llmIncludeLastErrorBtn.classList.remove("active");
@@ -470,13 +499,7 @@ window.LlmAssistantModule = (function () {
   }
 
   async function _handleSendLlmPrompt() {
-    if (!llmPromptInputEl || !llmSendPromptBtn) {
-      console.error(
-        "LLM_MOD_ERR: _handleSendLlmPrompt - Critical UI elements missing.",
-      );
-      return;
-    }
-
+    if (!llmPromptInputEl || !llmSendPromptBtn) return;
     const promptText = llmPromptInputEl.value.trim();
     if (!promptText) {
       if (dependencies.updateMessage)
@@ -487,27 +510,22 @@ window.LlmAssistantModule = (function () {
         );
       return;
     }
-
     _addMessageToChatHistory(promptText, "user");
     llmConversationHistory.push({ role: "user", content: promptText });
-
     llmPromptInputEl.value = "";
     llmPromptInputEl.style.height = "auto";
     llmPromptInputEl.disabled = true;
     llmSendPromptBtn.disabled = true;
 
-    const context = _getSelectedLlmContext(); // This will now include pythonLastErrorTraceback if set
+    const context = _getSelectedLlmContext();
     const payload = {
       prompt: promptText,
       context: context,
       history: llmConversationHistory.slice(-7, -1),
     };
 
-    // --- MODIFIED: Clear the captured last error AFTER it has been added to the payload for this send ---
     if (capturedLastErrorForNextPrompt && context.pythonLastErrorTraceback) {
-      // Ensure it was actually included
-      // console.log("LLM_MOD_LOG: Clearing capturedLastErrorForNextPrompt as it's being sent.");
-      capturedLastErrorForNextPrompt = null; // Clear it for next time
+      capturedLastErrorForNextPrompt = null;
       if (llmIncludeLastErrorBtn) {
         llmIncludeLastErrorBtn.classList.remove("active");
         llmIncludeLastErrorBtn.textContent = "❗ Include Error";
@@ -517,8 +535,8 @@ window.LlmAssistantModule = (function () {
     const assistantMessageDiv = _addMessageToChatHistory(
       "<i>Assistant is thinking...</i>",
       "assistant",
-      true, // isHtml
-      true, // isStreaming
+      true,
+      true,
     );
     let accumulatedResponse = "";
 
@@ -531,14 +549,13 @@ window.LlmAssistantModule = (function () {
         },
         body: JSON.stringify(payload),
       });
-
       if (!response.ok) {
         let errorDetail = `HTTP error ${response.status}: ${response.statusText}`;
         try {
           const errorJson = await response.json();
           errorDetail = errorJson.detail || errorJson.error || errorDetail;
         } catch (e) {
-          /* ignore if response is not json */
+          /* ignore */
         }
         console.error(
           "LLM_MOD_ERR: _handleSendLlmPrompt - Fetch not OK:",
@@ -546,20 +563,15 @@ window.LlmAssistantModule = (function () {
         );
         throw new Error(errorDetail);
       }
-      if (!response.body) {
-        console.error(
-          "LLM_MOD_ERR: _handleSendLlmPrompt - Response body is null.",
-        );
+      if (!response.body)
         throw new Error("Response body is null, cannot read stream.");
-      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let streamShouldEnd = false;
-
       if (assistantMessageDiv) {
-        assistantMessageDiv.dataset.rawContent = ""; // Clear "thinking..."
+        assistantMessageDiv.dataset.rawContent = "";
         assistantMessageDiv.innerHTML = "";
       }
 
@@ -571,29 +583,22 @@ window.LlmAssistantModule = (function () {
         } else {
           buffer += decoder.decode(value, { stream: true });
         }
-
         let eolIndex;
         while ((eolIndex = buffer.indexOf("\n\n")) >= 0) {
           const sseMessage = buffer.slice(0, eolIndex);
           buffer = buffer.slice(eolIndex + 2);
           let currentEventType = "message";
           let dataContent = "";
-
           sseMessage.split("\n").forEach((line) => {
             if (line.startsWith("event:"))
               currentEventType = line.substring("event:".length).trim();
             else if (line.startsWith("data:"))
               dataContent = line.substring("data:".length).trim();
           });
-
           if (dataContent) {
             try {
               const parsedData = JSON.parse(dataContent);
               if (currentEventType === "error") {
-                console.error(
-                  "LLM_MOD_ERR: SSE Event 'error':",
-                  parsedData.error,
-                );
                 const errorChunk = `\n[Stream Error: ${dependencies.escapeHtml(parsedData.error)}]`;
                 accumulatedResponse += errorChunk;
                 _updateStreamedMessage(assistantMessageDiv, errorChunk);
@@ -629,7 +634,7 @@ window.LlmAssistantModule = (function () {
                 currentEventType === "message" ||
                 currentEventType === "data"
               ) {
-                accumulatedResponse += dataContent; // Treat as raw text if JSON parse fails
+                accumulatedResponse += dataContent;
                 _updateStreamedMessage(assistantMessageDiv, dataContent);
               }
             }
@@ -640,7 +645,7 @@ window.LlmAssistantModule = (function () {
       }
 
       if (
-        llmConversationHistory.length === 0 || // Handle case of first message
+        llmConversationHistory.length === 0 ||
         llmConversationHistory[llmConversationHistory.length - 1].role !==
           "assistant"
       ) {
@@ -676,14 +681,12 @@ window.LlmAssistantModule = (function () {
     }
   }
 
-  // --- MODIFIED: _getSelectedLlmContext to include captured error ---
   function _getSelectedLlmContext() {
     const context = {};
     const appVars = dependencies.getAppVariables
       ? dependencies.getAppVariables()
       : {};
 
-    // Device context checks (no change)
     const noDeviceContextNeeded = !(
       llmContextUiHierarchyCheckbox?.checked ||
       llmContextSelectedElementCheckbox?.checked ||
@@ -700,38 +703,27 @@ window.LlmAssistantModule = (function () {
       );
     }
 
-    // UI Hierarchy (no change)
     if (
       llmContextUiHierarchyCheckbox?.checked &&
       appVars.currentHierarchyData &&
       appVars.currentDeviceSerial
     ) {
-      context.uiHierarchy = JSON.parse(
-        JSON.stringify(appVars.currentHierarchyData),
-      );
+      context.uiHierarchy = appVars.currentHierarchyData;
     }
-    // Selected Element (no change)
+
     if (
       llmContextSelectedElementCheckbox?.checked &&
-      appVars.selectedNode &&
+      appVars.selectedElements &&
+      appVars.selectedElements.length > 0 &&
       appVars.currentDeviceSerial
     ) {
-      context.selectedElement = JSON.parse(
-        JSON.stringify(appVars.selectedNode),
-      );
-      if (appVars.generatedXpathValue) {
-        context.selectedElement.generatedXPath = appVars.generatedXpathValue;
-      }
+      context.selectedElements = appVars.selectedElements;
     }
 
-    // --- MODIFIED: Include captured last error if present ---
     if (capturedLastErrorForNextPrompt) {
-      // console.log("LLM_MOD_LOG: Including capturedLastErrorForNextPrompt in context:", capturedLastErrorForNextPrompt.substring(0,100));
       context.pythonLastErrorTraceback = capturedLastErrorForNextPrompt;
-      // This error will be cleared AFTER it's sent, in _handleSendLlmPrompt
     }
 
-    // General Python Console Output (from dropdown)
     if (llmContextPythonConsoleOutputCheckbox?.checked) {
       if (
         dependencies.PythonConsoleManager &&
@@ -756,28 +748,21 @@ window.LlmAssistantModule = (function () {
               const currentIndex = fullOutput.lastIndexOf(keyword);
               if (currentIndex > lastErrorIndex) lastErrorIndex = currentIndex;
             }
-            if (lastErrorIndex !== -1) {
-              outputToSend = fullOutput.substring(lastErrorIndex);
-            } else {
-              outputToSend =
-                "# No specific error signature found in general console output via dropdown logic.";
-            }
+            outputToSend =
+              lastErrorIndex !== -1
+                ? fullOutput.substring(lastErrorIndex)
+                : "# No specific error signature found in general console output via dropdown logic.";
           } else {
             const linesToGet = parseInt(outputLinesCount, 10);
             if (!isNaN(linesToGet) && linesToGet > 0) {
-              const lines = fullOutput.split("\n");
-              outputToSend = lines.slice(-linesToGet).join("\n");
+              outputToSend = fullOutput
+                .split("\n")
+                .slice(-linesToGet)
+                .join("\n");
             } else {
               outputToSend = `# Invalid line count for general console output: ${outputLinesCount}`;
-              console.warn(
-                `LLM_MOD_WARN: Python Context: Invalid number of lines to get: ${outputLinesCount}`,
-              );
             }
           }
-          // Avoid sending the general console output if it's identical to the captured error
-          // or if the captured error (which is more specific) already contains this general snippet.
-          // This check is a bit simplistic, as 'includes' might be too broad.
-          // The backend will also do a redundancy check.
           if (
             !capturedLastErrorForNextPrompt ||
             !capturedLastErrorForNextPrompt.includes(outputToSend.trim())
@@ -788,32 +773,24 @@ window.LlmAssistantModule = (function () {
             outputToSend &&
             capturedLastErrorForNextPrompt !== outputToSend.trim()
           ) {
-            // If they are different, send both and let LLM prioritize based on system prompt
             context.pythonConsoleOutput = outputToSend;
-          } else {
-            // console.log("LLM_MOD_LOG: General console output seems redundant with captured error, not sending general output from JS.");
           }
         } else {
           context.pythonConsoleOutput =
             "# Python console output is currently empty.";
         }
       } else {
-        console.warn(
-          "LLM_MOD_WARN: PythonConsoleManager.getOutput is not available for general console log.",
-        );
         context.pythonConsoleOutput =
           "# Python console output is unavailable (manager error).";
       }
     }
 
-    // Python Code (no change)
     if (
       llmContextPythonCodeCheckbox?.checked &&
       dependencies.PythonConsoleManager?.getCode
     ) {
       context.pythonCode = dependencies.PythonConsoleManager.getCode();
     }
-    // Device Info (no change)
     if (
       llmContextDeviceInfoCheckbox?.checked &&
       appVars.currentDeviceSerial &&
@@ -832,25 +809,36 @@ window.LlmAssistantModule = (function () {
         };
       }
     }
-    // console.log("LLM_MOD_LOG: Final context being sent:", JSON.stringify(context).substring(0, 500) + "...");
     return context;
   }
 
-  // --- Public Functions (exposed via return) ---
+  function notifyNodeSelectionChanged(nodes) {
+    if (Array.isArray(nodes)) {
+      currentSelectedNodesForLlm = nodes.length > 0 ? nodes : null;
+    } else if (nodes) {
+      currentSelectedNodesForLlm = [nodes];
+    } else {
+      currentSelectedNodesForLlm = null;
+    }
+    if (llmContextSelectedElementCheckbox) {
+      llmContextSelectedElementCheckbox.checked = !!(
+        currentSelectedNodesForLlm && currentSelectedNodesForLlm.length > 0
+      );
+    }
+  }
+
   function init(initDeps) {
-    // console.log("LLM_MOD_LOG: LlmAssistantModule.init() called.");
     dependencies = { ...dependencies, ...initDeps };
     if (
-      typeof dependencies.getAppVariables !== "function" ||
-      typeof dependencies.updateMessage !== "function" ||
-      !dependencies.PythonConsoleManager // Ensure PythonConsoleManager is provided
+      !dependencies.getAppVariables ||
+      !dependencies.updateMessage ||
+      !dependencies.PythonConsoleManager
     ) {
       console.error(
-        "LLM_MOD_ERR: Core dependencies (getAppVariables, updateMessage, PythonConsoleManager) missing in LlmAssistantModule.init()!",
+        "LLM_MOD_ERR: Core dependencies missing in LlmAssistantModule.init()!",
       );
       return;
     }
-
     if (!_fetchLlmDomElements()) {
       console.error(
         "LLM_MOD_ERR: LlmAssistantModule.init failed due to missing critical DOM elements.",
@@ -858,9 +846,8 @@ window.LlmAssistantModule = (function () {
       return;
     }
 
-    if (llmSendPromptBtn) {
+    if (llmSendPromptBtn)
       llmSendPromptBtn.addEventListener("click", _handleSendLlmPrompt);
-    }
     if (llmPromptInputEl) {
       llmPromptInputEl.addEventListener("keypress", function (e) {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -873,17 +860,13 @@ window.LlmAssistantModule = (function () {
         this.style.height = Math.min(this.scrollHeight, 120) + "px";
       });
     }
-    if (llmClearConversationBtn) {
+    if (llmClearConversationBtn)
       llmClearConversationBtn.addEventListener("click", _clearLlmChat);
-    }
-
-    // --- MODIFIED: Add event listener for the new button ---
-    if (llmIncludeLastErrorBtn) {
+    if (llmIncludeLastErrorBtn)
       llmIncludeLastErrorBtn.addEventListener(
         "click",
         _handleIncludeLastErrorClick,
       );
-    }
 
     _fetchServiceConfigsAndInitRagPolling();
 
@@ -900,12 +883,6 @@ window.LlmAssistantModule = (function () {
     console.log(
       "LLM_MOD_LOG: LlmAssistantModule.init() finished successfully.",
     );
-  }
-
-  function notifyNodeSelectionChanged(node) {
-    if (llmContextSelectedElementCheckbox) {
-      llmContextSelectedElementCheckbox.checked = !!(node && node.key);
-    }
   }
 
   function openPropertiesTab(evt, tabName) {

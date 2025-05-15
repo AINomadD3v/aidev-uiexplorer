@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/merge/merge.css">
 
     <style>
         /* --- Global Resets & Font --- */
@@ -24,47 +25,42 @@
         body {
             font-family: var(--font-family-main); margin: 0; padding: 0; display: flex; flex-direction: column;
             height: 100vh; background-color: var(--dark-bg-primary); color: var(--dark-text-primary); font-size: 13px;
-            /* Add padding-top if message-area is fixed and overlaps */
-            padding-top: 0; /* Will be adjusted by JS if message area is shown */
+            padding-top: 0; 
         }
 
-        /* --- MODIFIED: Header --- */
         header {
             background-color: var(--dark-bg-secondary);
             color: var(--dark-text-primary);
-            padding: 6px 15px; /* Made skinnier */
-            /* text-align: center; /* Removed for flex layout */
+            padding: 6px 15px; 
             border-bottom: 1px solid var(--dark-border-primary);
             flex-shrink: 0;
-            display: flex; /* For title and RAG status */
+            display: flex; 
             justify-content: space-between;
             align-items: center;
-            height: 40px; /* Example fixed height, adjust as needed */
+            height: 40px; 
         }
         header h1 {
             margin: 0;
-            font-size: 1.1em; /* Slightly adjusted */
+            font-size: 1.1em; 
             font-weight: 500;
         }
 
-        /* --- MODIFIED: Message Area (Notification) --- */
         #message-area {
             padding: 8px 15px;
             text-align: center;
             background-color: var(--dark-bg-tertiary);
             color: var(--dark-text-secondary);
             font-size: 0.9em;
-            display: none; /* Initially hidden, shown by JS */
-            position: fixed; /* Fixed at the top */
+            display: none; 
+            position: fixed; 
             top: 0;
             left: 0;
             width: 100%;
-            z-index: 10000; /* Ensure it's on top of other content */
-            border-bottom: 1px solid var(--dark-border-primary); /* Border at the bottom now */
-            /* If header is also fixed, this needs to be handled carefully or body needs padding-top */
+            z-index: 10000; 
+            border-bottom: 1px solid var(--dark-border-primary); 
         }
-        body.message-visible { /* Class to add to body when message is shown */
-            padding-top: 35px; /* Adjust to height of message-area */
+        body.message-visible { 
+            padding-top: 35px; /* Height of the message area + its border */
         }
 
 
@@ -179,80 +175,48 @@
             border-top: 1px solid var(--dark-border-primary);
         }
         
-        /* --- MODIFIED: RAG API Status Indicator (in header) --- */
-        header .rag-api-status-container { /* Style for when it's in the header */
+        header .rag-api-status-container { 
             display: flex;
             align-items: center;
-            padding: 3px 6px; /* Smaller padding for header */
+            padding: 3px 6px; 
             border: 1px solid var(--dark-border-primary);
             border-radius: 4px;
             background-color: var(--dark-bg-tertiary);
-            font-size: 0.75em; /* Smaller font for header */
+            font-size: 0.75em; 
             color: var(--dark-text-secondary);
             cursor: default; 
-            margin-left: 10px; /* Space from title */
+            margin-left: 10px; 
         }
-
-        header #rag-api-status-indicator { /* Dot itself in header */
+        header #rag-api-status-indicator { 
             width: 7px; 
             height: 7px;
-            margin-right: 5px;
-            /* Other properties inherited or default */
-        }
-         /* Original RAG status styles for when it's NOT in header (if it ever moves back) */
-        .llm-context-actions-bar .rag-api-status-container {
-             display: flex;
-             align-items: center;
-             padding: 4px 8px; 
-             border: 1px solid var(--dark-border-primary);
-             border-radius: 4px;
-             background-color: var(--dark-bg-tertiary);
-             font-size: 0.8em; 
-             color: var(--dark-text-secondary);
-             cursor: default;
-        }
-         .llm-context-actions-bar #rag-api-status-indicator {
-            display: inline-block;
-            width: 8px;  
-            height: 8px;
-            border-radius: 50%;
+            border-radius: 50%; 
             background-color: #888; 
-            margin-right: 6px;    
-            transition: background-color 0.3s ease; 
-            flex-shrink: 0; 
+            margin-right: 5px;
+            transition: background-color 0.3s ease;
+            flex-shrink: 0;
         }
+        #rag-api-status-indicator.status-ok { background-color: var(--dark-success); }
+        #rag-api-status-indicator.status-error { background-color: var(--dark-error); }
+        #rag-api-status-indicator.status-degraded { background-color: var(--dark-warning); }
+        #rag-api-status-text { line-height: 1; }
 
-
-        #rag-api-status-indicator.status-ok {
-            background-color: var(--dark-success); 
-        }
-        #rag-api-status-indicator.status-error {
-            background-color: var(--dark-error); 
-        }
-        #rag-api-status-indicator.status-degraded {
-            background-color: var(--dark-warning); 
-        }
-        #rag-api-status-text { 
-            line-height: 1; 
-        }
-        /* --- END RAG API Status Indicator Styles --- */
-
-        .llm-context-toggle-btn, #llm-include-last-error-btn { 
+        .llm-context-toggle-btn, #llm-include-last-error-btn, #llm-multi-select-toggle-btn { 
             display: flex;
             align-items: center;
             gap: 4px;
             background-color: var(--dark-bg-tertiary); 
             border: 1px solid var(--dark-border-primary);
         }
-        .llm-context-toggle-btn:hover, #llm-include-last-error-btn:hover {
+        .llm-context-toggle-btn:hover, #llm-include-last-error-btn:hover, #llm-multi-select-toggle-btn:hover {
             background-color: var(--dark-bg-hover);
         }
-        #llm-include-last-error-btn.active { 
+        #llm-include-last-error-btn.active, #llm-multi-select-toggle-btn.active { 
             background-color: var(--dark-warning);
             color: var(--dark-bg-primary);
             border-color: var(--dark-warning);
         }
-        #llm-include-last-error-btn.active:hover {
+        #llm-include-last-error-btn.active:hover, #llm-multi-select-toggle-btn.active:hover {
              background-color: #ffae00; 
         }
 
@@ -278,7 +242,7 @@
         }
         .llm-context-panel-upwards {
             position: absolute;
-            bottom: calc(100% + 0px);
+            bottom: calc(100% + 0px); 
             left: 8px; 
             width: calc(100% - 16px);
             background-color: var(--dark-bg-secondary);
@@ -289,7 +253,6 @@
             z-index: 200; 
             display: flex;
             flex-direction: column;
-            gap: 8px;
             max-height: 0;
             opacity: 0;
             overflow: hidden; 
@@ -297,17 +260,54 @@
             transition: max-height 0.25s ease-out, opacity 0.2s ease-out, padding 0.25s ease-out;
         }
         .llm-context-panel-upwards:not(.collapsed) {
-            max-height: 220px;
+            max-height: 280px; 
             opacity: 1;
             overflow-y: auto; 
             padding: 10px;
         }
-        .llm-context-item { display: flex; align-items: center; font-size: 0.85em; color: var(--dark-text-secondary); padding: 6px 4px; border-radius: 3px; transition: background-color 0.2s; }
+        .llm-context-item { display: flex; align-items: center; font-size: 0.85em; color: var(--dark-text-secondary); padding: 6px 4px; border-radius: 3px; transition: background-color 0.2s; margin-bottom: 4px; }
         .llm-context-item label { cursor: pointer; display: flex; align-items: center; width: 100%; }
         .llm-context-item:hover { background-color: var(--dark-bg-hover); }
         .llm-context-item input[type="checkbox"] { margin-right: 8px; accent-color: var(--dark-accent-primary); transform: scale(0.9); cursor: pointer; }
         .llm-context-item select { margin-left: auto; font-size: 0.9em; padding: 2px 4px; background-color: var(--dark-bg-primary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-secondary); border-radius: 3px; max-width: 100px; }
         
+        #llm-multi-selected-elements-section {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed var(--dark-border-secondary);
+        }
+        #llm-multi-selected-elements-section h5 {
+            font-size: 0.85em;
+            color: var(--dark-text-secondary);
+            margin: 0 0 5px 0;
+            font-weight: 500;
+        }
+        #llm-multi-selected-elements-list {
+            max-height: 80px; 
+            overflow-y: auto;
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+        #llm-multi-selected-elements-list .multi-selected-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.8em;
+            padding: 3px 0;
+            color: var(--dark-text-primary);
+        }
+        #llm-multi-selected-elements-list .multi-selected-item input[type="checkbox"] {
+            margin-right: 6px;
+            transform: scale(0.8);
+            accent-color: var(--dark-accent-primary);
+        }
+        #llm-multi-selected-elements-list .multi-selected-item span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px; 
+        }
+
         .llm-prompt-area { padding: 8px; border-top: 1px solid var(--dark-border-primary); display: flex; gap: 8px; background-color: var(--dark-bg-secondary); align-items: flex-end; flex-shrink: 0; }
         #llm-prompt-input { background-color: var(--dark-bg-primary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-primary); border-radius: 4px; padding: 8px; font-family: var(--font-family-main); font-size: 0.9em; flex-grow: 1; resize: none; min-height: 38px; max-height: 120px; overflow-y: auto; }
         #llm-send-prompt-btn { padding: 0 12px; font-size: 1.2em; line-height: 36px; border: 1px solid var(--dark-border-primary); background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border-radius: 4px; cursor: pointer; align-self: flex-end; height: 38px; width: 40px; text-align: center; }
@@ -419,12 +419,13 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            height: 0;
+            height: 0; /* Initially collapsed */
             transition: height 0.25s ease-out;
         }
 
         .python-output-panel.open {
-            min-height: 60px;
+            /* Height is set by JS or drag, min-height ensures it's visible */
+            min-height: 60px; 
         }
 
         #python-output-drag-handle {
@@ -463,7 +464,8 @@
         }
     </style>
 </head>
-<body class="dark-theme"> <div id="message-area" style="display: none;">Initializing...</div>
+<body class="dark-theme"> 
+    <div id="message-area" style="display: none;">Initializing...</div>
     <header>
         <h1>UiAgent</h1>
         <div id="rag-api-status-container" class="rag-api-status-container">
@@ -508,6 +510,10 @@
                                 <button id="attach-context-toggle-btn" class="llm-context-toggle-btn small-button">
                                     <span class="llm-context-toggle-icon">▲</span> Context
                                 </button>
+                                <button id="llm-multi-select-toggle-btn" class="small-button" title="Toggle multi-element selection mode. When active, Ctrl+Click elements on the screenshot to add/remove them from a selection group.">
+                                    <input type="checkbox" id="llm-multi-select-checkbox" style="margin-right: 5px; vertical-align: middle; pointer-events: none;">
+                                    <span id="llm-multi-select-label">Multi-Select</span>
+                                </button>
                                 <button id="llm-include-last-error-btn" class="small-button" title="Capture the last Python error from the console and include it in the next message to the assistant.">❗ Include Error</button>
                                 <button id="llm-clear-conversation-btn" class="small-button">Clear Chat</button>
                             </div>
@@ -516,8 +522,7 @@
                                     <input type="checkbox" id="llm-context-ui-hierarchy" data-context-key="uiHierarchy"> Current UI Hierarchy
                                 </label>
                                 <label class="llm-context-item">
-                                    <input type="checkbox" id="llm-context-selected-element" data-context-key="selectedElement" checked> Selected Element
-                                </label>
+                                    <input type="checkbox" id="llm-context-selected-element" data-context-key="selectedElement" checked> Selected Element(s) </label>
                                 <label class="llm-context-item">
                                     <input type="checkbox" id="llm-context-python-console-output" data-context-key="pythonConsoleOutput"> Python Console
                                     <select id="llm-context-python-console-output-lines">
@@ -533,6 +538,10 @@
                                 <label class="llm-context-item">
                                     <input type="checkbox" id="llm-context-device-info" data-context-key="deviceInfo"> Device Info
                                 </label>
+                                <div id="llm-multi-selected-elements-section" style="display: none;"> <h5>Selected Elements for Context:</h5>
+                                    <ul id="llm-multi-selected-elements-list">
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                         <div class="llm-prompt-area">
@@ -592,209 +601,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/anyword-hint.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/merge/merge.js"></script>
 
     <script src="/static/python_console_module.js"></script>
     <script src="/static/llm_assistant_module.js"></script>
     <script src="/static/local_inspector.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // JS to manage message area visibility and body padding
-            const messageArea = document.getElementById('message-area');
-            // Example of how you might show/hide the message area from other JS modules
-            // window.showMessage = (text, type = 'info', duration = 3000) => {
-            //     messageArea.textContent = text;
-            //     messageArea.style.backgroundColor = type === 'error' ? 'var(--dark-error)' : type === 'warning' ? 'var(--dark-warning)' : 'var(--dark-bg-tertiary)';
-            //     messageArea.style.display = 'block';
-            //     document.body.classList.add('message-visible'); // Add class to body
-            //     if (duration > 0) {
-            //         setTimeout(() => {
-            //             messageArea.style.display = 'none';
-            //             document.body.classList.remove('message-visible'); // Remove class
-            //         }, duration);
-            //     }
-            // };
-            // window.hideMessage = () => {
-            //    messageArea.style.display = 'none';
-            //    document.body.classList.remove('message-visible');
-            // };
-
-
-            const toggleBtn = document.getElementById('toggle-device-select-btn');
-            const deviceMenu = document.getElementById('device-selection-area-collapsible');
-            if (toggleBtn && deviceMenu) {
-                toggleBtn.addEventListener('click', function() { deviceMenu.classList.toggle('collapsed'); });
-            } else { console.warn("DEMO_HTML_LOG: Toggle device select button or menu not found."); }
-
-            function initializePropertiesPanelDefaultTab() {
-                if (typeof window.openPropertiesTab === 'function') {
-                    try {
-                        const defaultPropertiesTabButton = document.querySelector("#properties-panel-tabs .tab-button.active");
-                        if (defaultPropertiesTabButton) {
-                            const defaultTabNameMatch = defaultPropertiesTabButton.getAttribute('onclick')?.match(/openPropertiesTab\(event, ['"]([^'"]+)['"]\)/);
-                            if (defaultTabNameMatch && defaultTabNameMatch[1]) {
-                                 window.openPropertiesTab({ currentTarget: defaultPropertiesTabButton }, defaultTabNameMatch[1]);
-                            } else {
-                                 console.warn("DEMO_HTML_LOG: Could not determine default tab name for properties panel from active button.");
-                            }
-                        } else {
-                             console.warn("DEMO_HTML_LOG: No active default tab button found for properties panel.");
-                        }
-                    } catch (e) {
-                        console.error("DEMO_HTML_LOG: Error during default properties tab initialization:", e);
-                    }
-                } else {
-                     console.warn("DEMO_HTML_LOG: window.openPropertiesTab is not defined. Properties panel default tab not set by demo.html script.");
-                }
-            }
-            setTimeout(initializePropertiesPanelDefaultTab, 100);
-
-            function setupPythonConsoleResizer() {
-                const pythonTabContent = document.getElementById('python-tab-content');
-                if (!pythonTabContent) {
-                    console.warn("Python Console Resizer: python-tab-content not found.");
-                    return;
-                }
-                const editorArea = pythonTabContent.querySelector('.python-editor-area');
-                const outputPanel = pythonTabContent.querySelector('#python-output-panel');
-                const dragHandle = pythonTabContent.querySelector('#python-output-drag-handle');
-                const toggleButton = pythonTabContent.querySelector('#toggle-python-output-btn');
-                const pythonToolbar = pythonTabContent.querySelector('.python-toolbar');
-
-                if (!editorArea || !outputPanel || !dragHandle || !toggleButton || !pythonToolbar) {
-                    console.error("Python console UI elements for resizing/toggling not all found. Aborting resizer setup.");
-                    return;
-                }
-
-                let isOutputPanelOpen = false;
-                const defaultOpenHeight = 200;
-                const collapsedHeight = 0;
-                let currentPanelHeight = defaultOpenHeight;
-
-                function applyPanelState(shouldBeOpen, newHeight) {
-                    if (shouldBeOpen) {
-                        outputPanel.classList.add('open');
-                        let targetHeight = newHeight !== undefined ? newHeight : currentPanelHeight;
-                        outputPanel.style.height = `${Math.max(60, targetHeight)}px`;
-                        toggleButton.textContent = "Hide Output";
-                    } else {
-                        outputPanel.classList.remove('open');
-                        outputPanel.style.height = `${collapsedHeight}px`;
-                        toggleButton.textContent = "Show Output";
-                    }
-
-                    if (window.PythonConsoleManager && typeof window.PythonConsoleManager.refresh === 'function') {
-                        setTimeout(() => {
-                            if (pythonTabContent.classList.contains('active')) {
-                                window.PythonConsoleManager.refresh();
-                            }
-                        }, 50);
-                    }
-                }
-
-                const storedHeightStr = localStorage.getItem('pythonOutputPanelHeight');
-                if (storedHeightStr) currentPanelHeight = parseInt(storedHeightStr, 10);
-
-                const storedOpenState = localStorage.getItem('pythonOutputPanelOpen');
-                if (storedOpenState !== null) isOutputPanelOpen = storedOpenState === 'true';
-
-                applyPanelState(isOutputPanelOpen, currentPanelHeight);
-
-                toggleButton.addEventListener('click', () => {
-                    isOutputPanelOpen = !isOutputPanelOpen;
-                    if (isOutputPanelOpen) {
-                        const heightToRestore = localStorage.getItem('pythonOutputPanelHeight');
-                        currentPanelHeight = heightToRestore ? parseInt(heightToRestore, 10) : defaultOpenHeight;
-                        applyPanelState(true, currentPanelHeight);
-                    } else {
-                        const currentHeightBeforeClose = parseInt(outputPanel.style.height, 10);
-                        if (currentHeightBeforeClose > 60) {
-                             localStorage.setItem('pythonOutputPanelHeight', currentHeightBeforeClose);
-                        }
-                        applyPanelState(false);
-                    }
-                    localStorage.setItem('pythonOutputPanelOpen', isOutputPanelOpen.toString());
-                });
-
-                let startY_drag, initialDragHeight_drag;
-                let isDragging_drag = false;
-
-                dragHandle.addEventListener('mousedown', function (e) {
-                    if (!isOutputPanelOpen) return;
-                    e.preventDefault();
-                    isDragging_drag = true;
-                    startY_drag = e.clientY;
-                    initialDragHeight_drag = outputPanel.offsetHeight;
-                    document.body.classList.add('dragging-ns');
-                });
-
-                document.addEventListener('mousemove', function (e) {
-                    if (!isDragging_drag || !isOutputPanelOpen) return;
-                    const deltaY = startY_drag - e.clientY;
-                    let newHeight = initialDragHeight_drag + deltaY;
-                    const minHeight = 60;
-                    const maxAllowedHeight = editorArea.clientHeight - 30; 
-
-                    newHeight = Math.max(minHeight, Math.min(newHeight, maxAllowedHeight));
-                    outputPanel.style.height = `${newHeight}px`;
-                    currentPanelHeight = newHeight;
-
-                    if (window.PythonConsoleManager?.refresh && pythonTabContent.classList.contains('active')) {
-                         window.PythonConsoleManager.refresh();
-                    }
-                });
-
-                document.addEventListener('mouseup', function () {
-                    if (isDragging_drag) {
-                        isDragging_drag = false;
-                        document.body.classList.remove('dragging-ns');
-                        if (isOutputPanelOpen) {
-                            localStorage.setItem('pythonOutputPanelHeight', outputPanel.offsetHeight);
-                        }
-                        if (window.PythonConsoleManager?.refresh && pythonTabContent.classList.contains('active')) {
-                             window.PythonConsoleManager.refresh();
-                        }
-                    }
-                });
-            }
-            setupPythonConsoleResizer();
-
-            // --- Attach Context Toggle (New Inline JS) ---
-            function setupAttachContextToggleNew() {
-                const contextToggleButton = document.getElementById('attach-context-toggle-btn');
-                const contextPanelUpwards = document.getElementById('attach-context-panel');
-
-                if (contextToggleButton && contextPanelUpwards) {
-                    // Ensure it starts collapsed as per HTML
-                    if (contextPanelUpwards.classList.contains('collapsed')) {
-                        contextToggleButton.classList.remove('open');
-                    } else {
-                        contextToggleButton.classList.add('open');
-                    }
-
-                    contextToggleButton.addEventListener('click', (event) => {
-                        event.stopPropagation(); 
-                        const isCurrentlyCollapsed = contextPanelUpwards.classList.contains('collapsed');
-                        contextPanelUpwards.classList.toggle('collapsed');
-                        contextToggleButton.classList.toggle('open', isCurrentlyCollapsed);
-                    });
-
-                    document.addEventListener('click', function(event) {
-                        if (!contextPanelUpwards.classList.contains('collapsed')) { // Only if panel is open
-                            const isClickInsidePanel = contextPanelUpwards.contains(event.target);
-                            const isClickOnToggleButton = contextToggleButton.contains(event.target);
-                            if (!isClickInsidePanel && !isClickOnToggleButton) {
-                                contextPanelUpwards.classList.add('collapsed');
-                                contextToggleButton.classList.remove('open');
-                            }
-                        }
-                    });
-                } else {
-                    console.warn("LLM Assistant: New Attach Context toggle elements not found for inline setup.");
-                }
-            }
-            setupAttachContextToggleNew(); 
-        });
-    </script>
+    
+    <script src="/static/uiagent_ui_setup.js" defer></script>
+    
     <style>
         body.dragging-ns, body.dragging-ns * {
             cursor: ns-resize !important;
@@ -806,3 +622,4 @@
     </style>
 </body>
 </html>
+

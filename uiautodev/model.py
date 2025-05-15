@@ -1,7 +1,15 @@
+# uiautodev/model.py
 from __future__ import annotations
 
-import typing
-from typing import Dict, List, Optional, Tuple, Union
+import typing  # Import the 'typing' module itself
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,  # Specific types from 'typing'
+    Tuple,
+    Union,
+)
 
 from pydantic import BaseModel
 
@@ -32,14 +40,14 @@ class Node(BaseModel):
     bounds: Optional[Tuple[float, float, float, float]] = None
     rect: Optional[Rect] = None
     properties: Dict[str, Union[str, bool]] = {}
-    children: List[Node] = []
+    children: List[Node] = []  # Forward reference to Node itself
 
 
-class OCRNode(Node):
+class OCRNode(Node):  # Inherits from Node
     confidence: float
 
 
-class WindowSize(typing.NamedTuple):
+class WindowSize(typing.NamedTuple):  # Using typing.NamedTuple
     width: int
     height: int
 
@@ -48,6 +56,7 @@ class AppInfo(BaseModel):
     packageName: str
 
 
+# --- Models previously in llm_service.py, now here ---
 class ToolCallFunction(BaseModel):
     name: Optional[str] = None
     arguments: Optional[str] = None
@@ -80,5 +89,28 @@ class LlmServiceChatRequest(BaseModel):
     model: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
-    # tools: Optional[List[Dict[str, Any]]] = None
-    # tool_choice: Optional[Union[str, Dict[str, Any]]] = None
+    # tools: Optional[List[Dict[str, Any]]] = None # Kept commented
+    # tool_choice: Optional[Union[str, Dict[str, Any]]] = None # Kept commented
+
+
+# --- Rebuild models to resolve forward references and complex types ---
+# It's generally good practice to rebuild models that have forward references
+# or are part of a complex import structure.
+
+# Rebuild models involved in LlmServiceChatRequest first, or those with forward refs.
+Node.model_rebuild(force=True)  # Node has a forward reference to itself in children
+OCRNode.model_rebuild(force=True)  # Inherits from Node
+
+ToolCallFunction.model_rebuild(force=True)
+ToolCall.model_rebuild(force=True)
+ChatMessageDelta.model_rebuild(force=True)
+ChatMessageContent.model_rebuild(force=True)
+LlmServiceChatRequest.model_rebuild(force=True)  # This is the one causing the error
+
+# Rebuild other models in the file for good measure
+DeviceInfo.model_rebuild(force=True)
+ShellResponse.model_rebuild(force=True)
+Rect.model_rebuild(force=True)
+AppInfo.model_rebuild(force=True)
+
+# Note: typing.NamedTuple (WindowSize) does not have model_rebuild
