@@ -25,7 +25,7 @@
         body {
             font-family: var(--font-family-main); margin: 0; padding: 0; display: flex; flex-direction: column;
             height: 100vh; background-color: var(--dark-bg-primary); color: var(--dark-text-primary); font-size: 13px;
-            padding-top: 0; 
+            /* Removed padding-top: 0; as toast won't push content */
         }
 
         header {
@@ -45,23 +45,62 @@
             font-weight: 500;
         }
 
-        #message-area {
-            padding: 8px 15px;
-            text-align: center;
+        /* --- OLD Message Area - Will be replaced by Toasts --- */
+        /* #message-area { ... } */ /* We can remove this or keep it hidden if some old JS still targets it */
+        
+        /* --- NEW: Toast Notification System --- */
+        #toast-container {
+            position: fixed;
+            top: 50px; /* Below the header */
+            right: 20px;
+            z-index: 10001; /* Higher than other elements */
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast-message {
             background-color: var(--dark-bg-tertiary);
             color: var(--dark-text-secondary);
+            padding: 12px 18px;
+            border-radius: 4px;
+            border: 1px solid var(--dark-border-secondary);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
             font-size: 0.9em;
-            display: none; 
-            position: fixed; 
-            top: 0;
-            left: 0;
-            width: 100%;
-            z-index: 10000; 
-            border-bottom: 1px solid var(--dark-border-primary); 
+            opacity: 0;
+            transform: translateX(100%);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            min-width: 250px;
+            max-width: 400px;
         }
-        body.message-visible { 
-            padding-top: 35px; /* Height of the message area + its border */
+
+        .toast-message.show {
+            opacity: 1;
+            transform: translateX(0);
         }
+
+        .toast-message.toast-success {
+            background-color: var(--dark-success);
+            color: white;
+            border-color: #3a9d40;
+        }
+        .toast-message.toast-error {
+            background-color: var(--dark-error);
+            color: white;
+            border-color: #c2362f;
+        }
+        .toast-message.toast-warning {
+            background-color: var(--dark-warning);
+            color: var(--dark-bg-primary); /* Dark text on yellow for contrast */
+            border-color: #dba907;
+        }
+        .toast-message.toast-info {
+            /* Uses default .toast-message styles or can be customized */
+            background-color: var(--dark-accent-primary);
+            color: white;
+            border-color: var(--dark-accent-hover);
+        }
+        /* --- END: Toast Notification System --- */
 
 
         .main-container { display: flex; flex-grow: 1; overflow: hidden; padding: 8px; gap: 8px; }
