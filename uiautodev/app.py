@@ -1,5 +1,4 @@
 # uiautodev/app.py
-
 import json
 import logging
 import os
@@ -22,6 +21,8 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from uiautodev.model import ChatMessageContent
 
 # --- Early .env loading and diagnostics ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -46,12 +47,12 @@ if not DOTENV_PATH.exists():
 
 from uiautodev import __version__
 from uiautodev.common import convert_bytes_to_image, ocr_image
+
+# Ensure correct import path if ChatMessageContent from llm_service is LlmServiceChatMessage
+from uiautodev.model import ChatMessageContent as LlmServiceChatMessage
 from uiautodev.model import Node
 from uiautodev.provider import AndroidProvider
 from uiautodev.router.device import make_router
-
-# Ensure correct import path if ChatMessageContent from llm_service is LlmServiceChatMessage
-from uiautodev.services.llm_service import ChatMessageContent as LlmServiceChatMessage
 from uiautodev.services.llm_service import (
     LlmServiceChatRequest,
     generate_chat_completion_stream,
@@ -104,11 +105,11 @@ class ApiChatMessage(BaseModel):  # For frontend<->uiautodev API
     content: str
 
 
-class ApiLlmChatRequest(BaseModel):  # For frontend<->uiautodev API
+class ApiLlmChatRequest(BaseModel):
     prompt: str
     context: Dict[str, Any] = {}
     history: List[ApiChatMessage] = []
-    model: Optional[str] = None
+    provider: Optional[str] = "deepseek"  # ✅ this matches the frontend
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
 
@@ -183,21 +184,25 @@ async def get_python_completions(request_data: PythonCompletionRequest):
 async def handle_llm_chat_via_service(
     client_request_data: ApiLlmChatRequest, http_request: Request
 ):
-    # Convert ApiChatMessage to LlmServiceChatMessage for the service layer
+
     service_history = [
-        LlmServiceChatMessage(
-            role=msg.role, content=msg.content
-        )  # Make sure LlmServiceChatMessage takes these
+        ChatMessageContent.model_validate(
+            msg.model_dump()
+        )  # 🔥 converts to correct model
         for msg in client_request_data.history
     ]
     service_request_data = LlmServiceChatRequest(
         prompt=client_request_data.prompt,
         context=client_request_data.context,
         history=service_history,
-        model=client_request_data.model,
+        provider=client_request_data.provider,  # ✅ not model
         temperature=client_request_data.temperature,
         max_tokens=client_request_data.max_tokens,
     )
+    logger.info(
+        f"🔍 Incoming LLM chat request with provider: {client_request_data.provider}"
+    )
+
     return StreamingResponse(
         generate_chat_completion_stream(service_request_data),
         media_type="text/event-stream",

@@ -2,16 +2,10 @@
 from __future__ import annotations
 
 import typing  # Import the 'typing' module itself
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,  # Specific types from 'typing'
-    Tuple,
-    Union,
-)
+from typing import Optional  # Specific types from 'typing'
+from typing import Any, Dict, List, Tuple, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class DeviceInfo(BaseModel):
@@ -84,18 +78,23 @@ class ChatMessageContent(BaseModel):
 
 class LlmServiceChatRequest(BaseModel):
     prompt: str
-    context: Dict[str, Any] = {}
-    history: List[ChatMessageContent] = []
+    context: Dict[str, Any] = Field(default_factory=dict)
+    history: List[ChatMessageContent] = Field(default_factory=list)
     model: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
-    # tools: Optional[List[Dict[str, Any]]] = None # Kept commented
-    # tool_choice: Optional[Union[str, Dict[str, Any]]] = None # Kept commented
+    provider: Optional[str] = None
 
+    @field_validator("history", mode="plain")
+    @classmethod
+    def coerce_history(cls, v):
+        if isinstance(v, list):
+            return [
+                ChatMessageContent(**item) if isinstance(item, dict) else item
+                for item in v
+            ]
+        raise ValueError("history must be a list")
 
-# --- Rebuild models to resolve forward references and complex types ---
-# It's generally good practice to rebuild models that have forward references
-# or are part of a complex import structure.
 
 # Rebuild models involved in LlmServiceChatRequest first, or those with forward refs.
 Node.model_rebuild(force=True)  # Node has a forward reference to itself in children

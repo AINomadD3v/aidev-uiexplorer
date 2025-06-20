@@ -39,8 +39,9 @@ window.LlmAssistantModule = (function () {
   let llmChatHistoryEl,
     llmPromptInputEl,
     llmSendPromptBtn,
-    llmClearConversationBtn;
-  let llmContextUiHierarchyCheckbox,
+    llmClearConversationBtn,
+    llmProviderSelect,
+    llmContextUiHierarchyCheckbox,
     llmContextSelectedElementCheckbox,
     llmContextPythonConsoleOutputCheckbox,
     llmContextPythonConsoleOutputLinesSelect,
@@ -61,6 +62,8 @@ window.LlmAssistantModule = (function () {
     llmChatHistoryEl = document.getElementById("llm-chat-history");
     llmPromptInputEl = document.getElementById("llm-prompt-input");
     llmSendPromptBtn = document.getElementById("llm-send-prompt-btn");
+    llmProviderSelect = document.getElementById("llm-provider-select");
+
     llmClearConversationBtn = document.getElementById(
       "llm-clear-conversation-btn",
     );
@@ -497,9 +500,9 @@ window.LlmAssistantModule = (function () {
       llmIncludeLastErrorBtn.textContent = "❗ Include Error";
     }
   }
-
   async function _handleSendLlmPrompt() {
     if (!llmPromptInputEl || !llmSendPromptBtn) return;
+
     const promptText = llmPromptInputEl.value.trim();
     if (!promptText) {
       if (dependencies.updateMessage)
@@ -510,6 +513,8 @@ window.LlmAssistantModule = (function () {
         );
       return;
     }
+
+    // Add user message to history and clear input field
     _addMessageToChatHistory(promptText, "user");
     llmConversationHistory.push({ role: "user", content: promptText });
     llmPromptInputEl.value = "";
@@ -518,12 +523,23 @@ window.LlmAssistantModule = (function () {
     llmSendPromptBtn.disabled = true;
 
     const context = _getSelectedLlmContext();
+
+    // 🧠 Get selected provider from dropdown
+    const selectedProvider = llmProviderSelect?.value || "deepseek";
+    console.log("🔥 Selected LLM provider from dropdown:", selectedProvider);
+
+    // Compose payload with provider
     const payload = {
       prompt: promptText,
       context: context,
-      history: llmConversationHistory.slice(-7, -1),
+      history: llmConversationHistory.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+      provider: selectedProvider,
     };
 
+    // Clear captured error if being sent
     if (capturedLastErrorForNextPrompt && context.pythonLastErrorTraceback) {
       capturedLastErrorForNextPrompt = null;
       if (llmIncludeLastErrorBtn) {
@@ -549,20 +565,20 @@ window.LlmAssistantModule = (function () {
         },
         body: JSON.stringify(payload),
       });
+
       if (!response.ok) {
         let errorDetail = `HTTP error ${response.status}: ${response.statusText}`;
         try {
           const errorJson = await response.json();
           errorDetail = errorJson.detail || errorJson.error || errorDetail;
-        } catch (e) {
-          /* ignore */
-        }
+        } catch (_) {}
         console.error(
           "LLM_MOD_ERR: _handleSendLlmPrompt - Fetch not OK:",
           errorDetail,
         );
         throw new Error(errorDetail);
       }
+
       if (!response.body)
         throw new Error("Response body is null, cannot read stream.");
 
@@ -570,6 +586,7 @@ window.LlmAssistantModule = (function () {
       const decoder = new TextDecoder();
       let buffer = "";
       let streamShouldEnd = false;
+
       if (assistantMessageDiv) {
         assistantMessageDiv.dataset.rawContent = "";
         assistantMessageDiv.innerHTML = "";
@@ -583,18 +600,22 @@ window.LlmAssistantModule = (function () {
         } else {
           buffer += decoder.decode(value, { stream: true });
         }
+
         let eolIndex;
         while ((eolIndex = buffer.indexOf("\n\n")) >= 0) {
           const sseMessage = buffer.slice(0, eolIndex);
           buffer = buffer.slice(eolIndex + 2);
+
           let currentEventType = "message";
           let dataContent = "";
+
           sseMessage.split("\n").forEach((line) => {
             if (line.startsWith("event:"))
               currentEventType = line.substring("event:".length).trim();
             else if (line.startsWith("data:"))
               dataContent = line.substring("data:".length).trim();
           });
+
           if (dataContent) {
             try {
               const parsedData = JSON.parse(dataContent);
@@ -644,24 +665,18 @@ window.LlmAssistantModule = (function () {
         if (streamShouldEnd) break;
       }
 
-      if (
-        llmConversationHistory.length === 0 ||
-        llmConversationHistory[llmConversationHistory.length - 1].role !==
-          "assistant"
-      ) {
+      // Final message handling
+      const lastMessage = llmConversationHistory.at(-1);
+      if (!lastMessage || lastMessage.role !== "assistant") {
         llmConversationHistory.push({
           role: "assistant",
           content: accumulatedResponse,
         });
-      } else if (llmConversationHistory.length > 0) {
-        llmConversationHistory[llmConversationHistory.length - 1].content =
-          accumulatedResponse;
+      } else {
+        lastMessage.content = accumulatedResponse;
       }
     } catch (error) {
-      console.error(
-        "LLM_MOD_ERR: _handleSendLlmPrompt - Error during fetch/stream processing:",
-        error,
-      );
+      console.error("LLM_MOD_ERR: Fetch/Stream error:", error);
       const errorMsg = `Sorry, I encountered an error: ${dependencies.escapeHtml(error.message)}`;
       if (assistantMessageDiv) {
         assistantMessageDiv.dataset.rawContent = errorMsg;

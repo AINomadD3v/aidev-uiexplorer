@@ -279,6 +279,7 @@
             border-color: var(--dark-error); 
             color: white;
         }
+
         .llm-context-panel-upwards {
             position: absolute;
             bottom: calc(100% + 0px); 
@@ -546,16 +547,27 @@
                         <div id="llm-chat-history"></div>
                         <div class="llm-context-controls-area">
                             <div class="llm-context-actions-bar">
-                                <button id="attach-context-toggle-btn" class="llm-context-toggle-btn small-button">
-                                    <span class="llm-context-toggle-icon">▲</span> Context
-                                </button>
-                                <button id="llm-multi-select-toggle-btn" class="small-button" title="Toggle multi-element selection mode. When active, Ctrl+Click elements on the screenshot to add/remove them from a selection group.">
-                                    <input type="checkbox" id="llm-multi-select-checkbox" style="margin-right: 5px; vertical-align: middle; pointer-events: none;">
-                                    <span id="llm-multi-select-label">Multi-Select</span>
-                                </button>
-                                <button id="llm-include-last-error-btn" class="small-button" title="Capture the last Python error from the console and include it in the next message to the assistant.">❗ Include Error</button>
-                                <button id="llm-clear-conversation-btn" class="small-button">Clear Chat</button>
-                            </div>
+    <button id="attach-context-toggle-btn" class="llm-context-toggle-btn small-button">
+        <span class="llm-context-toggle-icon">▲</span> Context
+    </button>
+    <button id="llm-multi-select-toggle-btn" class="small-button" title="Toggle multi-element selection mode. When active, Ctrl+Click elements on the screenshot to add/remove them from a selection group.">
+        <input type="checkbox" id="llm-multi-select-checkbox" style="margin-right: 5px; vertical-align: middle; pointer-events: none;">
+        <span id="llm-multi-select-label">Multi-Select</span>
+    </button>
+    <button id="llm-include-last-error-btn" class="small-button" title="Capture the last Python error from the console and include it in the next message to the assistant.">❗ Include Error</button>
+
+    <!-- ✅ NEW MODEL SELECT DROPDOWN FIXED AND INSERTED CORRECTLY -->
+    <label for="llm-provider-select" style="font-size: 0.85em; color: var(--dark-text-secondary); margin-left: auto;">
+      Model:
+      <select id="llm-provider-select" style="margin-left: 6px; font-size: 0.85em; padding: 3px 6px; background-color: var(--dark-bg-primary); color: var(--dark-text-primary); border: 1px solid var(--dark-border-secondary); border-radius: 3px;">
+        <option value="deepseek" selected>DeepSeek</option>
+        <option value="openai">OpenAI</option>
+      </select>
+    </label>
+
+    <button id="llm-clear-conversation-btn" class="small-button">Clear Chat</button>
+</div>
+
                             <div id="attach-context-panel" class="llm-context-panel-upwards collapsed">
                                 <label class="llm-context-item">
                                     <input type="checkbox" id="llm-context-ui-hierarchy" data-context-key="uiHierarchy"> Current UI Hierarchy
