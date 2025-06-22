@@ -1,0 +1,285 @@
+<script lang="ts">
+    import { tick } from 'svelte';
+    import { derived, get } from 'svelte/store';
+
+    // Import all the necessary stores.
+    import { screenshotStore } from '$lib/stores/screenshot';
+    import {
+        selectedSerial,
+        selectedNode,
+        hoveredNode,
+        multiSelectMode,
+        multiSelectedNodes,
+        type NodeInfo
+    } from '$lib/stores/uiagent';
+    import { hierarchy } from '$lib/stores/hierarchy';
+
+    // --- Local state & element bindings ---
+    let imgEl: HTMLImageElement;
+    let containerEl: HTMLDivElement;
+
+    let tooltip = {
+        visible: false,
+        x: 0,
+        y: 0,
+        content: ''
+    };
+
+    // The reactive URL that ensures the screenshot reloads when the device changes.
+    $: screenshotUrl = $selectedSerial ? `/api/android/${$selectedSerial}/screenshot/0?t=${Date.now()}` : '';
+
+    async function measureImage() {
+        await tick();
+        if (!imgEl) return;
+        screenshotStore.update(current => ({
+            ...current,
+            renderedWidth: imgEl.width,
+            renderedHeight: imgEl.height,
+            naturalWidth: imgEl.naturalWidth,
+            naturalHeight: imgEl.naturalHeight,
+        }));
+    }
+
+    const scaledNodes = derived([hierarchy, screenshotStore], ([$hierarchy, $screenshot]) => {
+        const allNodes: (NodeInfo & { pxRect: { x: number, y: number, w: number, h: number }})[] = [];
+        if (!$hierarchy || $screenshot.renderedWidth === 0) {
+            return allNodes;
+        }
+
+        function recurse(node: NodeInfo) {
+            if (node.bounds?.length === 4) {
+                const [x1, y1, x2, y2] = node.bounds;
+                const scaledRect = {
+                    x: x1 * $screenshot.renderedWidth,
+                    y: y1 * $screenshot.renderedHeight,
+                    w: (x2 - x1) * $screenshot.renderedWidth,
+                    h: (y2 - y1) * $screenshot.renderedHeight,
+                };
+                if (scaledRect.w > 0 && scaledRect.h > 0) {
+                    allNodes.push({ ...node, pxRect: scaledRect });
+                }
+            }
+            node.children?.forEach(recurse);
+        }
+        recurse($hierarchy);
+        return allNodes;
+    });
+
+    function findBestElement(candidates: NodeInfo[]): NodeInfo | null {
+        if (candidates.length === 0) return null;
+        if (candidates.length === 1) return candidates[0];
+        return candidates.sort((a, b) => {
+            const aClickable = a.properties?.clickable === true || a.properties?.clickable === 'true';
+            const bClickable = b.properties?.clickable === true || b.properties?.clickable === 'true';
+            if (aClickable && !bClickable) return -1;
+            if (!aClickable && bClickable) return 1;
+            const areaA = (a.bounds![2] - a.bounds![0]) * (a.bounds![3] - a.bounds![1]);
+            const areaB = (b.bounds![2] - b.bounds![0]) * (b.bounds![3] - b.bounds![1]);
+            return areaA - areaB;
+        })[0];
+    }
+
+    function getNodeAt(evt: MouseEvent): NodeInfo | null {
+        if (!$hierarchy || !imgEl) return null;
+        const imgRect = imgEl.getBoundingClientRect();
+        const x = evt.clientX - imgRect.left;
+        const y = evt.clientY - imgRect.top;
+        if (x < 0 || y < 0 || x > imgRect.width || y > imgRect.height) return null;
+        const relX = x / imgRect.width;
+        const relY = y / imgRect.height;
+        const candidates: NodeInfo[] = [];
+        for (const node of $scaledNodes) {
+            const [x1, y1, x2, y2] = node.bounds!;
+            if (relX >= x1 && relX <= x2 && relY >= y1 && relY <= y2) {
+                candidates.push(node);
+            }
+        }
+        return findBestElement(candidates);
+    }
+
+    function onMouseMove(evt: MouseEvent) {
+        const node = getNodeAt(evt);
+        hoveredNode.set(node);
+        if (node) {
+            let content = `<b>${node.name}</b>`;
+            const text = node.properties?.text;
+            const desc = node.properties?.['content-desc'];
+            const resId = node.properties?.['resource-id'];
+            if (resId) content += `<br><small>ID:</small> ${resId}`;
+            if (text) content += `<br><small>Text:</small> ${text}`;
+            if (desc) content += `<br><small>Desc:</small> ${desc}`;
+            tooltip = { visible: true, x: evt.clientX + 15, y: evt.clientY + 15, content };
+        } else {
+            tooltip.visible = false;
+        }
+    }
+
+    function onMouseLeave() {
+        hoveredNode.set(null);
+        tooltip.visible = false;
+    }
+
+    function onClick(evt: MouseEvent) {
+        const clickedNode = getNodeAt(evt);
+        multiSelectMode.set(evt.ctrlKey || evt.metaKey);
+        if (!clickedNode) {
+            if (!$multiSelectMode) {
+                selectedNode.set(null);
+                multiSelectedNodes.set([]);
+            }
+            return;
+        }
+        if ($multiSelectMode) {
+            const list = get(multiSelectedNodes);
+            const idx = list.findIndex((n) => n.key === clickedNode.key);
+            if (idx >= 0) {
+                list.splice(idx, 1);
+            } else {
+                list.push(clickedNode);
+            }
+            multiSelectedNodes.set(list);
+            selectedNode.set(list.at(-1) || null);
+        } else {
+            multiSelectedNodes.set([]);
+            selectedNode.set(clickedNode);
+        }
+    }
+
+    function onKeyDown(evt: KeyboardEvent) {
+        if (evt.key === 'Enter' || evt.key === ' ') {
+            const hovered = get(hoveredNode);
+            if (hovered && hovered.bounds) {
+                 const mockEvent = {
+                    ctrlKey: evt.ctrlKey,
+                    metaKey: evt.metaKey,
+                } as MouseEvent;
+                onClick(mockEvent);
+            }
+        }
+    }
+</script>
+
+<style>
+    .container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        cursor: crosshair;
+    }
+    img {
+        display: block;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    .overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
+    .overlay rect {
+        /*
+          FIX: The default fill is now `transparent` to prevent the grey mask.
+          The stroke is also made more transparent for a cleaner look.
+        */
+        stroke: rgba(150, 150, 150, 0.4);
+        stroke-width: 1px;
+        fill: transparent;
+        transition: all 0.1s ease-out;
+        pointer-events: all;
+    }
+    .overlay rect.hovered {
+        stroke: rgba(0, 255, 120, 0.9);
+        stroke-width: 2px;
+        fill: transparent;
+    }
+    .overlay rect.multi-selected {
+        stroke: rgba(255, 165, 0, 0.9);
+        stroke-width: 2px;
+        fill: rgba(255, 165, 0, 0.2);
+    }
+    .overlay rect.selected {
+        stroke: rgba(0, 120, 255, 0.95);
+        stroke-width: 2px;
+        fill: rgba(0, 120, 255, 0.25);
+    }
+    .placeholder {
+        color: #666;
+        text-align: center;
+    }
+    .tooltip {
+        position: fixed;
+        background-color: rgba(30, 30, 30, 0.95);
+        color: #f0f0f0;
+        border: 1px solid #666;
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-size: 13px;
+        font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+        pointer-events: none;
+        z-index: 1000;
+        max-width: 450px;
+        line-height: 1.6;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        word-break: break-all;
+    }
+    :global(.tooltip b) { color: #92c9ff; font-weight: bold; }
+    :global(.tooltip small) { color: #999; }
+</style>
+
+<div
+    bind:this={containerEl}
+    class="container"
+    role="application"
+    tabindex="0"
+    aria-label="Interactive Device Screenshot"
+    on:mousemove={onMouseMove}
+    on:mouseleave={onMouseLeave}
+    on:click={onClick}
+    on:keydown={onKeyDown}
+>
+    {#if !$selectedSerial}
+        <div class="placeholder">No device selected</div>
+    {:else}
+        <img
+            bind:this={imgEl}
+            src={screenshotUrl}
+            alt="Device screenshot"
+            on:load={measureImage}
+            on:error={() => console.error('Failed to load screenshot for', screenshotUrl)}
+        />
+        
+        <svg
+            class="overlay"
+            width={$screenshotStore.renderedWidth}
+            height={$screenshotStore.renderedHeight}
+            viewBox="0 0 {$screenshotStore.renderedWidth} {$screenshotStore.renderedHeight}"
+        >
+            {#each $scaledNodes as node (node.key)}
+                <rect
+                    x={node.pxRect.x}
+                    y={node.pxRect.y}
+                    width={node.pxRect.w}
+                    height={node.pxRect.h}
+                    class:selected={$selectedNode?.key === node.key}
+                    class:hovered={$hoveredNode?.key === node.key && $selectedNode?.key !== node.key}
+                    class:multi-selected={$multiSelectMode && $multiSelectedNodes.some(n => n.key === node.key)}
+                />
+            {/each}
+        </svg>
+    {/if}
+
+    {#if tooltip.visible}
+        <div class="tooltip" style="left: {tooltip.x}px; top: {tooltip.y}px;" role="tooltip">
+            {@html tooltip.content}
+        </div>
+    {/if}
+</div>
+

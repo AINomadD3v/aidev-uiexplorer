@@ -1,0 +1,24 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+
+  // Replace this with real store logic later
+  let imageSrc = '';
+  let canvasEl: HTMLCanvasElement;
+
+  onMount(async () => {
+    // temporary mock
+    imageSrc = '/static/screenshot.png'; // replace this with real API later
+  });
+</script>
+
+<style>
+  canvas {
+    pointer-events: none;
+  }
+</style>
+
+<div class="relative w-full max-w-[1080px] mx-auto border border-gray-700 rounded overflow-hidden">
+  <img src={imageSrc} alt="Device Screenshot" class="w-full h-auto" />
+  <canvas bind:this={canvasEl} class="absolute top-0 left-0 w-full h-full"></canvas>
+</div>
+
