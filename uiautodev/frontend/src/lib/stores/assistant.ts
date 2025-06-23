@@ -10,19 +10,19 @@ import { writable } from 'svelte/store';
 
 /** A structured payload for when the LLM suggests a code edit via a tool call. */
 export interface ToolCodeEdit {
-	tool_name: 'propose_edit';
-	explanation: string;
-	edit_type: 'APPLY_DIFF_PATCH' | 'REPLACE_ENTIRE_SCRIPT';
-	patch?: string; // Present for diff patches
-	code?: string; // Present for full replacements
+    tool_name: 'propose_edit';
+    explanation: string;
+    edit_type: 'APPLY_DIFF_PATCH' | 'REPLACE_ENTIRE_SCRIPT';
+    patch?: string; // Present for diff patches
+    code?: string; // Present for full replacements
 }
 
 /** Defines the shape of a single message in the chat history. */
 export interface ChatMessage {
-	role: 'user' | 'assistant';
-	type: 'message' | 'tool_code_edit'; // The type of content this message holds
-	content: string; // The raw text for a message, or the explanation for a tool call
-	toolPayload?: ToolCodeEdit; // The structured data, only present if it's a tool call
+    role: 'user' | 'assistant';
+    type: 'message' | 'tool_code_edit'; // The type of content this message holds
+    content: string; // The raw text for a message, or the explanation for a tool call
+    toolPayload?: ToolCodeEdit; // The structured data, only present if it's a tool call
 }
 
 // ─── WRITABLE STORE ─────────────────────────────────────────────────────────────────────────────
@@ -33,10 +33,11 @@ export interface ChatMessage {
  * the conversation history.
  */
 export const chatMessages = writable<ChatMessage[]>([
-	// The initial "welcome" message must conform to our new ChatMessage interface.
-	{
-		role: 'assistant',
-		type: 'message',
-		content: 'Hello! How can I assist you with your UI automation tasks today?'
-	}
+    // The initial "welcome" message that appears when the application loads.
+    {
+        role: 'assistant',
+        type: 'message',
+        content: 'Hello! How can I assist you with your UI automation tasks today?',
+        toolPayload: undefined
+    }
 ]);

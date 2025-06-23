@@ -9,7 +9,7 @@
 	import { pythonConsoleStore } from '$lib/stores/pythonConsole';
 	import { sendChatMessage } from '$lib/api/pythonClient';
 	import {
-		chatMessages,
+		chatMessages, // Ensure the store itself is imported
 		type ChatMessage as ChatMessageType,
 		type ToolCodeEdit
 	} from '$lib/stores/assistant';
@@ -127,7 +127,7 @@
 		if (includeLastError && $lastErrorTraceback) {
 			ctx.pythonLastErrorTraceback = $lastErrorTraceback;
 		}
-		
+
 		const consoleState = get(pythonConsoleStore);
 
 		if (consoleState.code) {
@@ -195,7 +195,10 @@
 					if (isLikelyToolCall) {
 						lastMessage.content = 'Assistant is generating a code suggestion...';
 					} else {
-						if (lastMessage.content === '...' || lastMessage.content === 'Assistant is generating a code suggestion...') {
+						if (
+							lastMessage.content === '...' ||
+							lastMessage.content === 'Assistant is generating a code suggestion...'
+						) {
 							lastMessage.content = token;
 						} else {
 							lastMessage.content += token;
@@ -240,6 +243,16 @@
 	}
 
 	onMount(() => {
+		// --- BUG FIX ---
+		// Use setTimeout to push this update to the next cycle of the browser's
+		// event loop. This can resolve stubborn hydration and lifecycle issues by
+		// ensuring the entire page is "settled" before we force the reactive update.
+		// We also create a new array with [...messages] to be certain Svelte sees a change.
+		setTimeout(() => {
+			chatMessages.update((messages) => [...messages]);
+			scrollToBottom();
+		}, 0);
+
 		const poll = async () => {
 			try {
 				const cfg = await fetch('/api/config/services').then((r) => r.json());
@@ -266,7 +279,7 @@
 
 <div class="llm-chat-main">
 	<div id="chat-history">
-		{#each $chatMessages as msg, i (i)}
+		{#each $chatMessages as msg (msg)}
 			<div class="llm-message {msg.role}">
 				<ChatMessage message={msg} />
 			</div>
