@@ -1,136 +1,109 @@
 <script lang="ts">
-    import { onMount, onDestroy, tick } from 'svelte';
-    import { browser } from '$app/environment';
+	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
+	import { get } from 'svelte/store';
 
-    // ---------------------------------------------------------------------------------
-    // REFACTOR STEP 1: DIRECT STORE IMPORT
-    // Instead of using props and dispatch, we import the store directly. This is the
-    // key to making this component self-sufficient.
-    // ---------------------------------------------------------------------------------
-    import { pythonConsoleStore } from '$lib/stores/pythonConsole';
+	// ─── CODE MIRROR 6 IMPORTS ──────────────────────────────────────────────────────────────────
+	// We now import specific modules for the state, view, and features we need.
+	import { EditorState } from '@codemirror/state';
+	import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
+	import { python } from '@codemirror/lang-python';
+	import { vim } from '@replit/codemirror-vim';
+	import { oneDark } from '@codemirror/theme-one-dark';
+	import { defaultKeymap, history, indentWithTab } from '@codemirror/commands';
+	import { autocompletion } from '@codemirror/autocomplete';
+	import { bracketMatching } from '@codemirror/language';
 
-    // ---------------------------------------------------------------------------------
-    // REFACTOR STEP 2: REMOVE PROPS AND DISPATCH
-    // We no longer need to receive code/cursor info as props or dispatch events,
-    // because we will now sync directly with the store. The `visible` prop is
-    // still useful for knowing when to refresh the editor's view.
-    // ---------------------------------------------------------------------------------
-    export let visible: boolean = true;
-    // REMOVED: export let code: string = '';
-    // REMOVED: export let line: number = 0;
-    // REMOVED: export let ch: number = 0;
-    // REMOVED: const dispatch = createEventDispatcher<...>();
+	// ─── SVELTE STORE IMPORT ────────────────────────────────────────────────────────────────────
+	import { pythonConsoleStore } from '$lib/stores/pythonConsole';
 
-    let textareaEl: HTMLTextAreaElement;
-    let editor: any; // This will hold the CodeMirror editor instance.
+	// ─── PROPS ──────────────────────────────────────────────────────────────────────────────────
+	// The `visible` prop is still useful for telling the editor when to refresh its layout.
+	export let visible: boolean = true;
 
-    onMount(async () => {
-        if (!browser) return;
+	// ─── LOCAL STATE ────────────────────────────────────────────────────────────────────────────
+	let editorEl: HTMLDivElement;
+	let view: EditorView; // This will hold the CodeMirror 6 view instance.
 
-        // Polyfill for CodeMirror UMD module (unchanged)
-        if (typeof (window as any).self === 'undefined') {
-            (window as any).self = window;
-        }
+	onMount(() => {
+		if (!browser) return;
 
-        // Dynamic import of CodeMirror and its addons (unchanged)
-        const { default: CodeMirror } = await import('codemirror');
-        await Promise.all([
-            import('codemirror/mode/python/python'),
-            import('codemirror/keymap/vim'),
-            import('codemirror/addon/hint/show-hint'),
-            import('codemirror/addon/hint/anyword-hint'),
-            import('codemirror/addon/selection/active-line'),
-            import('codemirror/addon/edit/matchbrackets'),
-        ]);
+		// This listener is a CodeMirror 6 extension that syncs our editor's state
+		// back to our Svelte store whenever a change occurs.
+		const updateListener = EditorView.updateListener.of((update) => {
+			if (update.docChanged) {
+				pythonConsoleStore.setCode(update.state.doc.toString());
+			}
+			if (update.selectionSet) {
+				const pos = update.state.selection.main;
+				pythonConsoleStore.setCursor({ line: pos.from, ch: pos.to });
+			}
+		});
 
-        // Initialize CodeMirror editor (unchanged)
-        editor = CodeMirror.fromTextArea(textareaEl, {
-            mode: 'python',
-            keyMap: 'vim',
-            theme: 'material-darker',
-            lineNumbers: true,
-            styleActiveLine: true,
-            matchBrackets: true,
-            extraKeys: {
-                'Ctrl-Space': 'autocomplete',
-                '.': (cm: any) => {
-                    cm.replaceSelection('.');
-                    setTimeout(() => cm.execCommand('autocomplete'), 50);
-                },
-            },
-            hintOptions: {
-                hint: (CodeMirror as any).hint.anyword,
-                completeSingle: false,
-                alignWithWord: true,
-            },
-        });
+		// We assemble all editor features into an array of extensions.
+		const extensions = [
+			lineNumbers(),
+			history(),
+			bracketMatching(),
+			highlightActiveLine(),
+			autocompletion(),
+			python(),
+			oneDark, // The theme is now just an extension
+			vim(),
+			keymap.of([...defaultKeymap, indentWithTab]),
+			updateListener // Our custom listener to sync state
+		];
 
-        // ---------------------------------------------------------------------------------
-        // REFACTOR STEP 3: INITIALIZE EDITOR FROM THE STORE
-        // We get the initial code and cursor position directly from our store.
-        // The `get()` function from 'svelte/store' gives us a one-time snapshot.
-        // ---------------------------------------------------------------------------------
-        const { get } = await import('svelte/store');
-        const currentState = get(pythonConsoleStore);
-        editor.setValue(currentState.code);
-        editor.setCursor(currentState.cursor);
+		// We get the initial state from our Svelte store.
+		const initialCode = get(pythonConsoleStore).code;
+		const initialState = EditorState.create({
+			doc: initialCode,
+			extensions: extensions
+		});
 
-        // ---------------------------------------------------------------------------------
-        // REFACTOR STEP 4: WRITE CHANGES BACK TO THE STORE
-        // In the editor's event listeners, instead of dispatching an event, we now
-        // directly call the appropriate method on our imported store.
-        // ---------------------------------------------------------------------------------
-        editor.on('changes', (cm: any) => {
-            // No more dispatch! Just update the store directly.
-            pythonConsoleStore.setCode(cm.getValue());
-        });
-        editor.on('cursorActivity', (cm: any) => {
-            const pos = cm.getCursor();
-            // Update the cursor in the store directly.
-            pythonConsoleStore.setCursor({ line: pos.line, ch: pos.ch });
-        });
+		// Finally, create the editor view and attach it to our <div>.
+		view = new EditorView({
+			state: initialState,
+			parent: editorEl
+		});
+	});
 
-        // Wait for parent to lay out and then refresh (unchanged)
-        await tick();
-        editor.refresh();
-    });
+	// This reactive block listens for changes in our Svelte store.
+	// If the code is changed programmatically (e.g., by the LLM Assistant),
+	// it dispatches a transaction to update the editor view.
+	$: if (view && $pythonConsoleStore.code !== view.state.doc.toString()) {
+		view.dispatch({
+			changes: {
+				from: 0,
+				to: view.state.doc.length,
+				insert: $pythonConsoleStore.code
+			}
+		});
+	}
 
-    // ---------------------------------------------------------------------------------
-    // REFACTOR STEP 5: REACTIVELY SYNC EXTERNAL CHANGES
-    // This reactive block (`$:`) listens for changes to the `code` value inside
-    // our store. If another component (like the LLM Assistant) programmatically
-    // updates the code in the store, this block will run and update the editor's
-    // content to match. This ensures the editor is always in sync.
-    // We use `$pythonConsoleStore` which is Svelte's auto-subscription syntax.
-    // ---------------------------------------------------------------------------------
-    $: if (editor && $pythonConsoleStore.code !== editor.getValue()) {
-        const pos = editor.getCursor(); // Save cursor position
-        editor.setValue($pythonConsoleStore.code);
-        editor.setCursor(pos); // Restore cursor position
-    }
+	// This reactive block refreshes the editor when it becomes visible,
+	// which can fix rendering glitches when a parent tab is switched.
+	$: if (view && visible) {
+		view.focus();
+	}
 
-    // Refresh when visibility changes (unchanged)
-    $: if (editor && visible) {
-        editor.refresh();
-    }
-
-    onDestroy(() => {
-        if (editor) {
-            editor.toTextArea();
-        }
-    });
+	onDestroy(() => {
+		// This is the proper way to clean up a CodeMirror 6 editor instance.
+		if (view) {
+			view.destroy();
+		}
+	});
 </script>
 
 <style>
-    /* Styles are unchanged */
-    :global(.CodeMirror) {
-        height: 100% !important;
-        width: 100%;
-        font-family: var(--font-family-monospace);
-        font-size: 13px;
-    }
+	/* The main editor class for CM6 is .cm-editor */
+	.editor-container,
+	:global(.cm-editor) {
+		height: 100%;
+		width: 100%;
+		font-family: var(--font-family-monospace);
+		font-size: 13px;
+	}
 </style>
 
-<!-- This textarea is the mounting point for the CodeMirror editor -->
-<textarea bind:this={textareaEl} style="display: none;"></textarea>
-
+<div class="editor-container" bind:this={editorEl}></div>

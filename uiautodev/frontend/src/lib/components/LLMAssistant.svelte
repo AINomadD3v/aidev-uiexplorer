@@ -1,7 +1,5 @@
 <script lang="ts">
-	// ─── SVELTE & STORE IMPORTS ─────────────────────────────────────────────────────────────────
 	import { onMount } from 'svelte';
-	// `writable` is no longer needed here as we don't create local stores for messages
 	import { get, derived } from 'svelte/store';
 	import ChatMessage from '$lib/components/ChatMessage.svelte';
 
@@ -10,67 +8,107 @@
 	import { hierarchy } from '$lib/stores/hierarchy';
 	import { pythonConsoleStore } from '$lib/stores/pythonConsole';
 	import { sendChatMessage } from '$lib/api/pythonClient';
-
-	// ✅ STEP 1: IMPORT THE SHARED CHAT STORE
-	// We will use this store as the single source of truth for the conversation.
-	import { chatMessages } from '$lib/stores/assistant';
+	import {
+		chatMessages,
+		type ChatMessage as ChatMessageType,
+		type ToolCodeEdit
+	} from '$lib/stores/assistant';
 
 	// ─── LOCAL COMPONENT STATE ──────────────────────────────────────────────────────────────────
-	// The state for the chat messages has been removed from here.
-	// The remaining local state is for UI controls specific to this component.
-	// ❌ STEP 2: REMOVE THE LOCAL MESSAGE STATE
-	// interface Message { ... } // REMOVED
-	// const messages = writable<Message[]>([]); // REMOVED
-
 	let promptText = '';
 	let model: 'deepseek' | 'openai' = 'deepseek';
 	let isLoading = false;
 	let isContextOpen = false;
 	let isSettingsOpen = false;
 
-	// ─── LOCAL UI STATE FOR CONTEXT CHECKBOXES (Unchanged) ──────────────────────────────────────
+	// ─── LOCAL UI STATE FOR CONTEXT CHECKBOXES ──────────────────────────────────────────────────
 	let ctxUiHierarchy = false;
 	let ctxSelectedElem = true;
 	let ctxPyConsoleOut = false;
 	let ctxPyConsoleLines: 'lastError' | '5' | '10' | 'all' = '5';
-	let ctxPyCode = false;
 	let ctxDeviceInfo = false;
 
-	// ─── DERIVED STORES FOR REACTIVE STATE (Unchanged) ───────────────────────────────────────────
+	// ─── DERIVED STORES ─────────────────────────────────────────────────────────────────────────
 	const lastErrorTraceback = derived(pythonConsoleStore, ($store) => $store.lastError);
 	const hasLastError = derived(lastErrorTraceback, ($traceback) => $traceback != null);
 	let includeLastError = false;
 
-	// ─── RAG STATUS (Unchanged) ──────────────────────────────────────────────────────────────────
+	// ─── RAG STATUS ─────────────────────────────────────────────────────────────────────────────
 	let ragStatusText = 'RAG Status';
 	let ragStatusClass = '';
 
-	// ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────────────────────
+	// ─── HELPER FUNCTIONS ───────────────────────────────────────────────────────────────────────
 	function scrollToBottom() {
-		const el = document.getElementById('chat-history');
-		if (el) el.scrollTop = el.scrollHeight;
+		requestAnimationFrame(() => {
+			const el = document.getElementById('chat-history');
+			if (el) el.scrollTop = el.scrollHeight;
+		});
 	}
 
-	// ✅ STEP 3: UPDATE FUNCTIONS TO USE THE SHARED STORE
-	function addMessage(raw: string, role: 'user' | 'assistant') {
-		// This now updates the central `chatMessages` store.
-		chatMessages.update((ms) => [...ms, { role, raw }]);
+	function addMessage(
+		content: string,
+		role: 'user' | 'assistant',
+		type: 'message' | 'tool_code_edit' = 'message'
+	) {
+		const newMessage: ChatMessageType = { role, type, content, toolPayload: undefined };
+		chatMessages.update((ms) => [...ms, newMessage]);
 		scrollToBottom();
 	}
 
 	function clearChat() {
-		// This now resets the central `chatMessages` store to its initial state.
 		chatMessages.set([
 			{
 				role: 'assistant',
-				raw: 'Hello! How can I assist you with your UI automation tasks today?'
+				type: 'message',
+				content: 'Hello! How can I assist you with your UI automation tasks today?',
+				toolPayload: undefined
 			}
 		]);
 		includeLastError = false;
 	}
 
-	// ─── CORE LOGIC: GATHER CONTEXT (Unchanged) ───────────────────────────────────────────────────
-	function gatherContext() {
+	function extractToolCall(text: string): { toolCall: ToolCodeEdit; precedingText: string } | null {
+		const jsonStartIndex = text.indexOf('{');
+		if (jsonStartIndex === -1) {
+			return null;
+		}
+
+		let braceCount = 0;
+		let jsonEndIndex = -1;
+		let inString = false;
+		let isEscaped = false;
+
+		for (let i = jsonStartIndex; i < text.length; i++) {
+			const char = text[i];
+			if (char === '"' && !isEscaped) inString = !inString;
+			if (!inString) {
+				if (char === '{') braceCount++;
+				if (char === '}') braceCount--;
+			}
+			isEscaped = char === '\\' && !isEscaped;
+			if (braceCount === 0) {
+				jsonEndIndex = i;
+				break;
+			}
+		}
+
+		if (jsonEndIndex !== -1) {
+			const precedingText = text.substring(0, jsonStartIndex).trim();
+			const potentialJson = text.substring(jsonStartIndex, jsonEndIndex + 1);
+			try {
+				const parsed = JSON.parse(potentialJson);
+				if (parsed.tool_name === 'propose_edit') {
+					return { toolCall: parsed, precedingText };
+				}
+			} catch (e) {
+				// Not valid JSON
+			}
+		}
+		return null;
+	}
+
+	// ─── CORE LOGIC: GATHER CONTEXT ─────────────────────────────────────────────────────────────
+	function gatherContext(): object {
 		const ctx: any = {};
 		if (ctxUiHierarchy && $hierarchy) {
 			ctx.uiHierarchy = $hierarchy;
@@ -89,7 +127,13 @@
 		if (includeLastError && $lastErrorTraceback) {
 			ctx.pythonLastErrorTraceback = $lastErrorTraceback;
 		}
+		
 		const consoleState = get(pythonConsoleStore);
+
+		if (consoleState.code) {
+			ctx.pythonCode = consoleState.code;
+		}
+
 		if (ctxPyConsoleOut && consoleState.output.length > 0) {
 			const out = consoleState.output.join('\n');
 			if (ctxPyConsoleLines === 'all') {
@@ -100,9 +144,6 @@
 				const n = parseInt(ctxPyConsoleLines);
 				ctx.pythonConsoleOutput = consoleState.output.slice(-n).join('\n');
 			}
-		}
-		if (ctxPyCode && consoleState.code) {
-			ctx.pythonCode = consoleState.code;
 		}
 		if (ctxDeviceInfo && $selectedSerial) {
 			const currentDevice = $devices.find((d) => d.serial === $selectedSerial);
@@ -117,7 +158,7 @@
 		return ctx;
 	}
 
-	// ─── CORE LOGIC: SEND PROMPT ──────────────────────────────────────────────────────────────────
+	// ─── CORE LOGIC: SEND PROMPT & HANDLE RESPONSE ──────────────────────────────────
 	async function sendPrompt() {
 		const userInput = promptText.trim();
 		if (!userInput || isLoading) return;
@@ -130,10 +171,9 @@
 		const payload = {
 			prompt: userInput,
 			context: gatherContext(),
-			// ✅ STEP 3 (cont.): Read history from the shared store.
 			history: get(chatMessages)
 				.slice(0, -2)
-				.map((m) => ({ role: m.role, content: m.raw })),
+				.map((m) => ({ role: m.role, content: m.content })),
 			provider: model
 		};
 
@@ -142,50 +182,68 @@
 		}
 
 		try {
-			await sendChatMessage(payload, (chunk) => {
-				// ✅ STEP 3 (cont.): Update the shared store with the streaming response.
-				const currentMessages = get(chatMessages);
-				if (currentMessages[currentMessages.length - 1].raw === '...') {
-					chatMessages.update((ms) => {
-						ms[ms.length - 1].raw = chunk;
-						return ms;
-					});
-				} else {
-					chatMessages.update((ms) => {
-						ms[ms.length - 1].raw += chunk;
-						return ms;
-					});
+			let accumulatedResponse = '';
+			let isLikelyToolCall = false;
+			await sendChatMessage(payload, (token) => {
+				accumulatedResponse += token;
+				if (accumulatedResponse.includes('{') && !isLikelyToolCall) {
+					isLikelyToolCall = true;
 				}
+				chatMessages.update((ms) => {
+					const lastMessage = ms[ms.length - 1];
+					if (!lastMessage) return ms;
+					if (isLikelyToolCall) {
+						lastMessage.content = 'Assistant is generating a code suggestion...';
+					} else {
+						if (lastMessage.content === '...' || lastMessage.content === 'Assistant is generating a code suggestion...') {
+							lastMessage.content = token;
+						} else {
+							lastMessage.content += token;
+						}
+					}
+					lastMessage.type = 'message';
+					return ms;
+				});
 				scrollToBottom();
 			});
-		} catch (err: any) {
-			// ✅ STEP 3 (cont.): Update the shared store on error.
+
 			chatMessages.update((ms) => {
-				ms[ms.length - 1].raw = `Sorry, an error occurred: ${err.message}`;
+				const lastMessage = ms[ms.length - 1];
+				if (!lastMessage) return ms;
+				const parsedResult = extractToolCall(accumulatedResponse);
+				if (parsedResult) {
+					lastMessage.type = 'tool_code_edit';
+					lastMessage.content =
+						parsedResult.precedingText || parsedResult.toolCall.explanation || 'Code patch proposed.';
+					lastMessage.toolPayload = parsedResult.toolCall;
+				} else {
+					lastMessage.type = 'message';
+					lastMessage.content = accumulatedResponse;
+				}
+				return ms;
+			});
+		} catch (err: any) {
+			chatMessages.update((ms) => {
+				const lastMessage = ms[ms.length - 1];
+				if (lastMessage) lastMessage.content = `Sorry, an error occurred: ${err.message}`;
 				return ms;
 			});
 		} finally {
 			isLoading = false;
+			scrollToBottom();
 		}
 	}
 
-	// ─── CORE LOGIC: TOGGLE ERROR (Unchanged) ───────────────────────────────────────────────────
 	function toggleError() {
-		if (!get(hasLastError)) {
-			return;
-		}
+		if (!get(hasLastError)) return;
 		includeLastError = !includeLastError;
 	}
 
-	// ─── ONMOUNT LIFECYCLE (Unchanged) ──────────────────────────────────────────────────────────
 	onMount(() => {
-		// clearChat(); // We might not want to clear the chat every time the component mounts
 		const poll = async () => {
 			try {
 				const cfg = await fetch('/api/config/services').then((r) => r.json());
-				if (!cfg.ragApiBaseUrl) {
-					throw new Error('RAG API URL not configured.');
-				}
+				if (!cfg.ragApiBaseUrl) throw new Error('RAG API URL not configured.');
 				const url = cfg.ragApiBaseUrl.replace(/\/$/, '') + '/health';
 				const h = await fetch(url).then((r) => r.json());
 				ragStatusText = h.status === 'ok' ? 'RAG Online' : 'RAG Degraded';
@@ -210,7 +268,7 @@
 	<div id="chat-history">
 		{#each $chatMessages as msg, i (i)}
 			<div class="llm-message {msg.role}">
-				<ChatMessage rawContent={msg.raw} />
+				<ChatMessage message={msg} />
 			</div>
 		{/each}
 	</div>
@@ -248,7 +306,6 @@
 				<div class="popover-panel context-panel">
 					<label><input type="checkbox" bind:checked={ctxUiHierarchy} /> UI Hierarchy</label>
 					<label><input type="checkbox" bind:checked={ctxSelectedElem} /> Selected Element</label>
-					<label><input type="checkbox" bind:checked={ctxPyCode} /> Python Code</label>
 					<label><input type="checkbox" bind:checked={ctxDeviceInfo} /> Device Info</label>
 					<label>
 						<input type="checkbox" bind:checked={ctxPyConsoleOut} />
@@ -298,14 +355,12 @@
 </div>
 
 <style>
-	/* All styles are unchanged */
 	.llm-chat-main {
 		height: 100%;
 		display: flex;
 		flex-direction: column;
 		background: var(--dark-bg-primary, #1e1e1e);
 	}
-
 	#chat-history {
 		flex: 1;
 		overflow-y: auto;
@@ -314,7 +369,6 @@
 		flex-direction: column;
 		gap: 0.75rem;
 	}
-
 	.llm-message {
 		max-width: 90%;
 		word-break: break-word;
@@ -328,6 +382,8 @@
 		padding: 6px 10px;
 		border-radius: 6px;
 		border-bottom-right-radius: 2px;
+		/* --- THIS IS THE FIX --- */
+		width: fit-content;
 	}
 	.llm-message.assistant {
 		align-self: flex-start;
@@ -337,7 +393,6 @@
 		border-radius: 6px;
 		border-bottom-left-radius: 2px;
 	}
-
 	:global(.llm-message.assistant p:first-child) {
 		margin-top: 0;
 	}
@@ -375,14 +430,12 @@
 		font-size: 11px;
 		cursor: pointer;
 	}
-
 	.prompt-area {
 		padding: 0.5rem;
 		border-top: 1px solid #333;
 		background: var(--dark-bg-secondary, #252526);
 		flex-shrink: 0;
 	}
-
 	.actions-toolbar {
 		display: flex;
 		justify-content: space-between;
@@ -420,7 +473,6 @@
 	.icon-btn:disabled:hover {
 		background-color: transparent;
 	}
-
 	.popover-panel {
 		position: absolute;
 		bottom: 100%;
@@ -435,7 +487,7 @@
 	.context-panel {
 		left: 0;
 		display: grid;
-		grid-template-columns: repeat(2, minmax(150px, 1fr));
+		grid-template-columns: repeat(2, minmax(140px, 1fr));
 		gap: 0.6rem;
 	}
 	.settings-panel {
@@ -453,7 +505,6 @@
 	.popover-panel input[type='checkbox'] {
 		cursor: pointer;
 	}
-
 	.settings-panel select {
 		width: 100%;
 		background: #2a2a2a;
@@ -471,7 +522,6 @@
 		border-radius: 4px;
 		cursor: pointer;
 	}
-
 	.rag-status-indicator {
 		width: 8px;
 		height: 8px;
@@ -486,7 +536,6 @@
 	.rag-status-indicator.status-error {
 		background-color: #f44336;
 	}
-
 	.prompt-input-wrapper {
 		display: flex;
 		align-items: flex-end;
@@ -514,7 +563,6 @@
 	.prompt-input:focus {
 		outline: none;
 	}
-
 	.send-btn {
 		margin-left: 4px;
 		background: #007acc;

@@ -1,123 +1,107 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PYTHON CONSOLE CUSTOM STORE
-// This file defines a "custom Svelte store". Instead of just being a simple
-// `writable`, it's an object that bundles multiple pieces of state (`code`,
-// `output`, etc.) and the functions (`setCode`, `executeInteractive`, etc.)
-// that operate on that state. This is a powerful pattern for organizing
-// related logic and keeping your components clean.
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * @file This custom Svelte store manages the complete state for the Python Console.
+ * It bundles the state (code, output, etc.) and the actions that can modify that state,
+ * creating a self-contained and reusable module for the console's logic.
+ */
 
 import { writable, get } from 'svelte/store';
 import type { InteractiveResponse } from '$lib/api/types';
 import { executeInteractivePython } from '$lib/api/pythonClient';
 
-// -----------------------------------------------------------------------------
-// STORE STATE INTERFACE
-// We define the "shape" of our store's data. This ensures type safety and
-// makes it clear what information the store is responsible for.
-// -----------------------------------------------------------------------------
+/** Defines the shape of the data managed by the python console store. */
 interface PythonConsoleState {
-    code: string;                      // The current Python code in the editor
-    output: string[];                  // Accumulated console output lines
-    lastError: string | null;          // The most recent traceback, if any
-    isOpen: boolean;                   // Is the output panel visible?
-    cursor: { line: number; ch: number }; // Editor cursor position
+	/** The current Python code in the editor. */
+	code: string;
+	/** An array of accumulated output lines from executed code. */
+	output: string[];
+	/** The most recent traceback string, if an error occurred. */
+	lastError: string | null;
+	/** Controls the visibility of the console's output panel. */
+	isOpen: boolean;
+	/** The editor's last known cursor position. */
+	cursor: { line: number; ch: number };
 }
 
-// -----------------------------------------------------------------------------
-// INITIAL STATE
-// Defines the default values for the store when the application first loads.
-// -----------------------------------------------------------------------------
-const initial: PythonConsoleState = {
-    code: `# Write Python here.\n# Use Vim keys, Ctrl-Space for completions.\nprint("Hello UIAgent")\n`,
-    output: [],
-    lastError: null,
-    isOpen: false,
-    cursor: { line: 0, ch: 0 },
+/** The default state for the console when the application first loads. */
+const initialState: PythonConsoleState = {
+	code: `# Write Python here.\n# Use Vim keys, Ctrl-Space for completions.\nprint("Hello UIAgent")\n`,
+	output: [],
+	lastError: null,
+	isOpen: false,
+	cursor: { line: 0, ch: 0 }
 };
 
-// -----------------------------------------------------------------------------
-// STORE CREATION FACTORY
-// This function creates and returns our store object. It's the standard Svelte
-// custom store pattern.
-// -----------------------------------------------------------------------------
+/** Factory function that creates the custom store object. */
 function createPythonConsoleStore() {
-    // We create a `writable` store internally to hold our state object.
-    const state = writable<PythonConsoleState>({ ...initial });
-    const { subscribe, update, set } = state;
+	const { subscribe, update, set } = writable<PythonConsoleState>({ ...initialState });
 
-    // We return an object containing the `subscribe` method (which is required
-    // for Svelte's reactivity) and our custom methods (actions).
-    return {
-        // Expose the mandatory `subscribe` method so components can listen for changes.
-        subscribe,
+	return {
+		/** Allows Svelte components to subscribe to state changes. */
+		subscribe,
 
-        // ACTION: Update the code in the store's state.
-        setCode: (newCode: string) =>
-            update((s) => {
-                s.code = newCode;
-                return s;
-            }),
+		/** Replaces the entire editor content with new code. Used by the LLM to apply suggestions. */
+		applyPatch: (newCode: string) =>
+			update((s) => {
+				s.code = newCode;
+				return s;
+			}),
 
-        // ACTION: Update the cursor position.
-        setCursor: (pos: { line: number; ch: number }) =>
-            update((s) => {
-                s.cursor = pos;
-                return s;
-            }),
+		/** Updates the code in the store. Primarily called by the editor component on user input. */
+		setCode: (newCode: string) =>
+			update((s) => {
+				s.code = newCode;
+				return s;
+			}),
 
-        // ACTION: Clear all console output and the stored lastError.
-        clearOutput: () =>
-            update((s) => {
-                s.output = [];
-                s.lastError = null;
-                return s;
-            }),
+		/** Updates the cursor position in the store. */
+		setCursor: (pos: { line: number; ch: number }) =>
+			update((s) => {
+				s.cursor = pos;
+				return s;
+			}),
 
-        // ACTION: Append new lines to the console output.
-        appendOutput: (text: string) =>
-            update((s) => {
-                const lines = text.split(/\r?\n/).filter((l) => l !== '');
-                s.output = [...s.output, ...lines];
-                return s;
-            }),
+		/** Clears all console output and the stored error message. */
+		clearOutput: () =>
+			update((s) => {
+				s.output = [];
+				s.lastError = null;
+				return s;
+			}),
 
-        // ACTION: Specifically store the last traceback for the LLM Assistant to use.
-        setLastError: (err: string) =>
-            update((s) => {
-                s.lastError = err;
-                return s;
-            }),
+		/** Appends new lines to the console output. */
+		appendOutput: (text: string) =>
+			update((s) => {
+				const lines = text.split(/\r?\n/).filter((l) => l !== '');
+				s.output = [...s.output, ...lines];
+				return s;
+			}),
 
-        // ACTIONS: Control the visibility of the console panel.
-        open: () => update((s) => ((s.isOpen = true), s)),
-        close: () => update((s) => ((s.isOpen = false), s)),
-        toggleOpen: () => update((s) => ((s.isOpen = !s.isOpen), s)),
+		/** Stores the last error traceback for the LLM to potentially use as context. */
+		setLastError: (err: string) =>
+			update((s) => {
+				s.lastError = err;
+				return s;
+			}),
 
-        // ACTION: Execute the current code via the API.
-        // This is a great example of co-locating an action with the state it depends on.
-        executeInteractive: async (
-            serial: string,
-            enableTracing: boolean = false
-        ): Promise<InteractiveResponse> => {
-            // `get(state)` gives us a one-time snapshot of the current state.
-            const { code } = get(state);
+		/** Controls the visibility of the console's output panel. */
+		open: () => update((s) => ((s.isOpen = true), s)),
+		close: () => update((s) => ((s.isOpen = false), s)),
+		toggleOpen: () => update((s) => ((s.isOpen = !s.isOpen), s)),
 
-            // Delegate the actual `fetch` call to our clean API client.
-            const resp = await executeInteractivePython(
-                serial,
-                code,
-                enableTracing
-            );
-            return resp;
-        },
+		/** Executes the current code in the editor via the backend API. */
+		executeInteractive: async (
+			serial: string,
+			enableTracing: boolean = false
+		): Promise<InteractiveResponse> => {
+			const { code } = get({ subscribe });
+			const resp = await executeInteractivePython(serial, code, enableTracing);
+			return resp;
+		},
 
-        // ACTION: Reset the entire store back to its initial state.
-        reset: () => set({ ...initial }),
-    };
+		/** Resets the entire store back to its default state. */
+		reset: () => set({ ...initialState })
+	};
 }
 
-// Finally, we create a single instance of our store and export it.
-// Any Svelte component can now import this `pythonConsoleStore` and use it.
+/** The singleton instance of the python console store, exported for use in any component. */
 export const pythonConsoleStore = createPythonConsoleStore();
-
