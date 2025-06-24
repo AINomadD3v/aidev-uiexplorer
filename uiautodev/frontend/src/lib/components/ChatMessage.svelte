@@ -1,13 +1,10 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { get } from 'svelte/store';
 	import { marked } from 'marked';
 	import hljs from 'highlight.js/lib/core';
 	import python from 'highlight.js/lib/languages/python';
-	import diff from 'highlight.js/lib/languages/diff';
 	import 'highlight.js/styles/github-dark.css';
 
-	import { applyPatch } from 'diff';
 	import { pythonConsoleStore } from '$lib/stores/pythonConsole';
 	import type { ChatMessage as ChatMessageType } from '$lib/stores/assistant';
 
@@ -15,9 +12,10 @@
 
 	let parsedContent = '';
 
-	// --- Library Config ---
+	// --- Library Configuration ---
+	// We only need to register the python language now.
 	hljs.registerLanguage('python', python);
-	hljs.registerLanguage('diff', diff);
+
 	marked.setOptions({
 		gfm: true,
 		breaks: true,
@@ -27,7 +25,7 @@
 		}
 	});
 
-	// --- Reactive Rendering Logic ---
+	// --- Reactive Rendering for Standard Messages ---
 	$: if (browser && message.type === 'message') {
 		try {
 			parsedContent = marked.parse(message.content || '');
@@ -37,44 +35,49 @@
 		}
 	}
 
-	// --- Helper Functions ---
-	function getFilenameFromPatch(patch: string): string {
-		const match = patch.match(/^\+\+\+ b\/(.+)/m);
-		return match ? match[1] : 'script.py';
-	}
+	// ---
+	// --- ✅ FINAL ACTION-BASED EDIT LOGIC
+	// ---
 
-	function extractCodeFromPatch(patch: string): string {
-		const addedLines = patch.match(/^\+(?!.*\+\+\+.*$).*/gm);
-		if (!addedLines) return '';
-		return addedLines.map((line) => line.substring(1)).join('\n');
-	}
-
-	function handleApplyPatch(event: MouseEvent) {
-		if (message.type !== 'tool_code_edit' || !message.toolPayload?.patch) return;
+	/**
+	 * Handles the 'Apply Edit' button click.
+	 * It dispatches the REPLACE_BLOCK action to the pythonConsoleStore.
+	 */
+	function handleApplyReplacement(event: MouseEvent) {
+		const payload = message.toolPayload;
+		if (
+			!payload ||
+			payload.edit_type !== 'REPLACE_BLOCK' ||
+			payload.start_line === undefined ||
+			payload.end_line === undefined ||
+			payload.code === undefined
+		) {
+			console.error('Invalid payload for handleApplyReplacement:', payload);
+			alert('Cannot apply edit: The suggestion from the assistant was incomplete.');
+			return;
+		}
 
 		const button = event.currentTarget as HTMLButtonElement;
-		const originalCode = get(pythonConsoleStore).code;
-		const patch = message.toolPayload.patch;
 
-		try {
-			const newCode = applyPatch(originalCode, patch);
-			if (newCode === false) {
-				throw new Error('Patch could not be applied cleanly. The content does not match the patch.');
-			}
-			pythonConsoleStore.setCode(newCode);
-			button.innerText = 'Applied!';
-			button.disabled = true;
-		} catch (e: any) {
-			console.warn(`Standard patch failed: ${e.message}. Attempting fallback to full replacement.`);
-			try {
-				const extractedCode = extractCodeFromPatch(patch);
-				pythonConsoleStore.setCode(extractedCode);
-				button.innerText = 'Applied!';
-				button.disabled = true;
-			} catch (fallbackError: any) {
-				alert(`A critical error occurred during the patch fallback routine: ${fallbackError.message}`);
-			}
-		}
+		pythonConsoleStore.dispatchReplaceAction({
+			start_line: payload.start_line,
+			end_line: payload.end_line,
+			code: payload.code
+		});
+
+		button.innerText = 'Applied';
+		button.disabled = true;
+	}
+
+	/**
+	 * Handles the 'Load in Editor' button for full script replacements.
+	 */
+	function handleLoadScript(event: MouseEvent) {
+		if (message.type !== 'tool_code_edit' || !message.toolPayload?.code) return;
+		const button = event.currentTarget as HTMLButtonElement;
+		pythonConsoleStore.setCode(message.toolPayload.code || '');
+		button.innerText = 'Loaded';
+		button.disabled = true;
 	}
 </script>
 
@@ -82,22 +85,20 @@
 	<div class="tool-call-container">
 		<div class="explanation">{@html marked.parse(message.content)}</div>
 
-		{#if message.toolPayload.edit_type === 'APPLY_DIFF_PATCH' && message.toolPayload.patch}
+		{#if message.toolPayload.edit_type === 'REPLACE_BLOCK' && message.toolPayload.code !== undefined}
 			<div class="code-block-container">
 				<div class="code-block-header">
-					<span class="filename">{getFilenameFromPatch(message.toolPayload.patch)}</span>
-					<button on:click={handleApplyPatch}>Apply Patch</button>
+					<span>Suggested Edit</span>
+					<button on:click={handleApplyReplacement}>Apply Edit</button>
 				</div>
 				<pre
-					class="language-diff"><code>{@html hljs.highlight(message.toolPayload.patch, { language: 'diff' }).value}</code></pre>
+					class="language-python"><code>{@html hljs.highlight(message.toolPayload.code, { language: 'python' }).value}</code></pre>
 			</div>
 		{:else if message.toolPayload.edit_type === 'REPLACE_ENTIRE_SCRIPT' && message.toolPayload.code}
 			<div class="code-block-container">
 				<div class="code-block-header">
-					<span class="filename">script.py</span>
-					<button on:click={() => pythonConsoleStore.setCode(message.toolPayload?.code || '')}>
-						Load in Editor
-					</button>
+					<span>script.py</span>
+					<button on:click={handleLoadScript}> Load in Editor </button>
 				</div>
 				<pre
 					class="language-python"><code>{@html hljs.highlight(message.toolPayload.code, { language: 'python' }).value}</code></pre>
@@ -111,13 +112,13 @@
 {/if}
 
 <style>
+	/* Styles are unchanged */
 	.tool-call-container {
 		width: 100%;
 	}
 	.explanation {
 		margin-bottom: 0.75rem;
 	}
-
 	.code-block-container {
 		border: 1px solid #444;
 		border-radius: 6px;
@@ -125,7 +126,6 @@
 		overflow: hidden;
 		margin-top: 0.5rem;
 	}
-
 	.code-block-header {
 		display: flex;
 		justify-content: space-between;
@@ -134,13 +134,11 @@
 		padding: 0.3rem 0.3rem 0.3rem 0.8rem;
 		border-bottom: 1px solid #444;
 	}
-
-	.code-block-header .filename {
+	.code-block-header span {
 		font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 		font-size: 12px;
 		color: #ccc;
 	}
-
 	.code-block-header button {
 		background-color: #007acc;
 		color: white;
@@ -152,27 +150,22 @@
 		font-weight: 500;
 		transition: background-color 0.2s;
 	}
-
-	.code-block-header button:hover {
+	.code-block-header button:hover:not(:disabled) {
 		background-color: #005a99;
 	}
-
 	.code-block-header button:disabled {
 		background-color: #4caf50;
 		cursor: default;
 	}
-
 	.code-block-container pre {
 		margin: 0 !important;
 		border: none !important;
 		border-radius: 0 0 4px 4px;
 		padding: 0.8rem;
 	}
-
-	/* --- THIS IS THE FIX --- */
 	.message-content :global(p) {
-		margin: 0; /* Remove default margins from marked.js's <p> tags */
-		display: inline; /* Make the paragraph only as wide as its text content */
-		/* Using 'inline' is often simpler than 'inline-block' if no block properties are needed */
+		margin: 0;
+		display: inline;
 	}
 </style>
+

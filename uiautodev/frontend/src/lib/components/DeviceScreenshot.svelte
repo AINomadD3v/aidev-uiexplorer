@@ -2,10 +2,9 @@
 	import { tick } from 'svelte';
 	import { derived, get } from 'svelte/store';
 
-	// 1. UPDATE THIS IMPORT to bring in the new trigger store.
-	import { screenshotStore, screenshotRefreshTrigger } from '$lib/stores/screenshot';
-
-	// The rest of the imports are unchanged.
+	// ✅ 1. Import all necessary stores and functions
+	import { screenshotStore, refreshScreenshot, screenshotRefreshTrigger } from '$lib/stores/screenshot';
+	import { hierarchy, refreshHierarchy } from '$lib/stores/hierarchy'; // This is the key to the fix
 	import {
 		selectedSerial,
 		selectedNode,
@@ -14,11 +13,11 @@
 		multiSelectedNodes,
 		type NodeInfo
 	} from '$lib/stores/uiagent';
-	import { hierarchy } from '$lib/stores/hierarchy';
 
 	// --- Local state & element bindings ---
 	let imgEl: HTMLImageElement;
 	let containerEl: HTMLDivElement;
+	let isRefreshing = false;
 
 	let tooltip = {
 		visible: false,
@@ -27,16 +26,29 @@
 		content: ''
 	};
 
-	// 2. UPDATE THIS LINE to use the reactive trigger store instead of a static Date.now().
-	// This makes the URL automatically update whenever the trigger store changes value.
+	// ✅ 2. Use the imported trigger store for reactivity
 	$: screenshotUrl = $selectedSerial
 		? `/api/android/${$selectedSerial}/screenshot/0?t=${$screenshotRefreshTrigger}`
 		: '';
 
-	//
-	// No other changes are needed in the rest of the script section.
-	// All functions below this point remain exactly the same.
-	//
+	// ✅ 3. The new, combined refresh handler
+	async function handleRefresh() {
+		if (isRefreshing || !$selectedSerial) return;
+		isRefreshing = true;
+		console.log('Refreshing hierarchy and screenshot...');
+
+		try {
+			// First, tell the hierarchy to refresh. We `await` this to ensure
+			// the new locator data is fetched before we proceed.
+			await refreshHierarchy();
+
+			// Then, call the exported function to refresh the screenshot.
+			refreshScreenshot();
+		} catch (error) {
+			console.error('Failed to refresh:', error);
+		}
+		// The loading state will be turned off when the image finishes loading.
+	}
 
 	async function measureImage() {
 		await tick();
@@ -48,6 +60,7 @@
 			naturalWidth: imgEl.naturalWidth,
 			naturalHeight: imgEl.naturalHeight
 		}));
+		isRefreshing = false; // Stop the loading spinner
 	}
 
 	const scaledNodes = derived([hierarchy, screenshotStore], ([$hierarchy, $screenshot]) => {
@@ -157,6 +170,10 @@
 	}
 
 	function onKeyDown(evt: KeyboardEvent) {
+		if (evt.key === 'r' && (evt.metaKey || evt.ctrlKey)) {
+			evt.preventDefault();
+			handleRefresh();
+		}
 		if (evt.key === 'Enter' || evt.key === ' ') {
 			const hovered = get(hoveredNode);
 			if (hovered && hovered.bounds) {
@@ -171,7 +188,6 @@
 </script>
 
 <style>
-	/* --- NO CHANGES NEEDED IN THE STYLE SECTION --- */
 	.container {
 		position: relative;
 		width: 100%;
@@ -181,6 +197,12 @@
 		justify-content: center;
 		overflow: hidden;
 		cursor: crosshair;
+	}
+    /* ✅ NEW: This wrapper will contain the image and overlay, ensuring they are aligned. */
+	.image-wrapper {
+		position: relative;
+        /* This prevents extra space from being added below the image element */
+		line-height: 0;
 	}
 	img {
 		display: block;
@@ -192,8 +214,7 @@
 		position: absolute;
 		top: 0;
 		left: 0;
-		width: 100%;
-		height: 100%;
+        /* The width and height will be set dynamically via component state */
 		pointer-events: none;
 	}
 	.overlay rect {
@@ -245,6 +266,42 @@
 	:global(.tooltip small) {
 		color: #999;
 	}
+	.refresh-button {
+		position: absolute;
+		top: 12px;
+		right: 12px;
+		z-index: 10;
+		background: rgba(30, 30, 30, 0.6);
+		border: 1px solid #888;
+		color: #fff;
+		border-radius: 50%;
+		width: 36px;
+		height: 36px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 20px;
+		line-height: 1;
+		backdrop-filter: blur(2px);
+		transition: all 0.2s ease-out;
+	}
+	.refresh-button:hover {
+		background: rgba(0, 120, 255, 0.7);
+		transform: rotate(120deg);
+	}
+	.refresh-button.loading {
+		cursor: not-allowed;
+		animation: spin 1s linear infinite;
+	}
+	@keyframes spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
+	}
 </style>
 
 <div
@@ -261,33 +318,49 @@
 	{#if !$selectedSerial}
 		<div class="placeholder">No device selected</div>
 	{:else}
-		<img
-			bind:this={imgEl}
-			src={screenshotUrl}
-			alt="Device screenshot"
-			on:load={measureImage}
-			on:error={() => console.error('Failed to load screenshot for', screenshotUrl)}
-		/>
+        <!-- ✅ NEW WRAPPER DIV -->
+		<div class="image-wrapper">
+			<button
+				class="refresh-button"
+				class:loading={isRefreshing}
+				on:click={handleRefresh}
+				disabled={isRefreshing}
+				title="Refresh Screenshot & Hierarchy (Ctrl+R)"
+			>
+				&#x21bb;
+			</button>
 
-		<svg
-			class="overlay"
-			width={$screenshotStore.renderedWidth}
-			height={$screenshotStore.renderedHeight}
-			viewBox="0 0 {$screenshotStore.renderedWidth} {$screenshotStore.renderedHeight}"
-		>
-			{#each $scaledNodes as node (node.key)}
-				<rect
-					x={node.pxRect.x}
-					y={node.pxRect.y}
-					width={node.pxRect.w}
-					height={node.pxRect.h}
-					class:selected={$selectedNode?.key === node.key}
-					class:hovered={$hoveredNode?.key === node.key && $selectedNode?.key !== node.key}
-					class:multi-selected={$multiSelectMode &&
-						$multiSelectedNodes.some((n) => n.key === node.key)}
-				/>
-			{/each}
-		</svg>
+			<img
+				bind:this={imgEl}
+				src={screenshotUrl}
+				alt="Device screenshot"
+				on:load={measureImage}
+				on:error={() => {
+					console.error('Failed to load screenshot for', screenshotUrl);
+					isRefreshing = false;
+				}}
+			/>
+
+			<svg
+				class="overlay"
+				width={$screenshotStore.renderedWidth}
+				height={$screenshotStore.renderedHeight}
+				viewBox="0 0 {$screenshotStore.renderedWidth} {$screenshotStore.renderedHeight}"
+			>
+				{#each $scaledNodes as node (node.key)}
+					<rect
+						x={node.pxRect.x}
+						y={node.pxRect.y}
+						width={node.pxRect.w}
+						height={node.pxRect.h}
+						class:selected={$selectedNode?.key === node.key}
+						class:hovered={$hoveredNode?.key === node.key && $selectedNode?.key !== node.key}
+						class:multi-selected={$multiSelectMode &&
+							$multiSelectedNodes.some((n) => n.key === node.key)}
+					/>
+				{/each}
+			</svg>
+		</div>
 	{/if}
 
 	{#if tooltip.visible}
@@ -296,3 +369,4 @@
 		</div>
 	{/if}
 </div>
+

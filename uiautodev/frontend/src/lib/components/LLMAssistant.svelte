@@ -9,7 +9,7 @@
 	import { pythonConsoleStore } from '$lib/stores/pythonConsole';
 	import { sendChatMessage } from '$lib/api/pythonClient';
 	import {
-		chatMessages, // Ensure the store itself is imported
+		chatMessages,
 		type ChatMessage as ChatMessageType,
 		type ToolCodeEdit
 	} from '$lib/stores/assistant';
@@ -45,24 +45,20 @@
 		});
 	}
 
-	function addMessage(
-		content: string,
+	function createMessage(
 		role: 'user' | 'assistant',
+		content: string,
 		type: 'message' | 'tool_code_edit' = 'message'
-	) {
-		const newMessage: ChatMessageType = { role, type, content, toolPayload: undefined };
-		chatMessages.update((ms) => [...ms, newMessage]);
-		scrollToBottom();
+	): ChatMessageType {
+		return { role, type, content, toolPayload: undefined, codeSnapshot: undefined };
 	}
 
 	function clearChat() {
 		chatMessages.set([
-			{
-				role: 'assistant',
-				type: 'message',
-				content: 'Hello! How can I assist you with your UI automation tasks today?',
-				toolPayload: undefined
-			}
+			createMessage(
+				'assistant',
+				'Hello! How can I assist you with your UI automation tasks today?'
+			)
 		]);
 		includeLastError = false;
 	}
@@ -107,8 +103,7 @@
 		return null;
 	}
 
-	// ─── CORE LOGIC: GATHER CONTEXT ─────────────────────────────────────────────────────────────
-	function gatherContext(): object {
+	function gatherContext(): any {
 		const ctx: any = {};
 		if (ctxUiHierarchy && $hierarchy) {
 			ctx.uiHierarchy = $hierarchy;
@@ -158,19 +153,22 @@
 		return ctx;
 	}
 
-	// ─── CORE LOGIC: SEND PROMPT & HANDLE RESPONSE ──────────────────────────────────
 	async function sendPrompt() {
 		const userInput = promptText.trim();
 		if (!userInput || isLoading) return;
 
 		isLoading = true;
-		addMessage(userInput, 'user');
+		chatMessages.update((ms) => [...ms, createMessage('user', userInput)]);
 		promptText = '';
-		addMessage('...', 'assistant');
+
+		const contextForLLM = gatherContext();
+		const codeSnapshot = contextForLLM.pythonCode;
+
+		chatMessages.update((ms) => [...ms, createMessage('assistant', '...', 'message')]);
 
 		const payload = {
 			prompt: userInput,
-			context: gatherContext(),
+			context: contextForLLM,
 			history: get(chatMessages)
 				.slice(0, -2)
 				.map((m) => ({ role: m.role, content: m.content })),
@@ -183,29 +181,14 @@
 
 		try {
 			let accumulatedResponse = '';
-			let isLikelyToolCall = false;
 			await sendChatMessage(payload, (token) => {
 				accumulatedResponse += token;
-				if (accumulatedResponse.includes('{') && !isLikelyToolCall) {
-					isLikelyToolCall = true;
-				}
 				chatMessages.update((ms) => {
 					const lastMessage = ms[ms.length - 1];
-					if (!lastMessage) return ms;
-					if (isLikelyToolCall) {
-						lastMessage.content = 'Assistant is generating a code suggestion...';
-					} else {
-						if (
-							lastMessage.content === '...' ||
-							lastMessage.content === 'Assistant is generating a code suggestion...'
-						) {
-							lastMessage.content = token;
-						} else {
-							lastMessage.content += token;
-						}
+					if (lastMessage && lastMessage.content.startsWith('...')) {
+						lastMessage.content = accumulatedResponse;
 					}
-					lastMessage.type = 'message';
-					return ms;
+					return [...ms];
 				});
 				scrollToBottom();
 			});
@@ -213,23 +196,25 @@
 			chatMessages.update((ms) => {
 				const lastMessage = ms[ms.length - 1];
 				if (!lastMessage) return ms;
+
 				const parsedResult = extractToolCall(accumulatedResponse);
 				if (parsedResult) {
 					lastMessage.type = 'tool_code_edit';
 					lastMessage.content =
-						parsedResult.precedingText || parsedResult.toolCall.explanation || 'Code patch proposed.';
+						parsedResult.precedingText || parsedResult.toolCall.explanation || 'Code edit proposed.';
 					lastMessage.toolPayload = parsedResult.toolCall;
+					lastMessage.codeSnapshot = codeSnapshot;
 				} else {
 					lastMessage.type = 'message';
 					lastMessage.content = accumulatedResponse;
 				}
-				return ms;
+				return [...ms];
 			});
 		} catch (err: any) {
 			chatMessages.update((ms) => {
 				const lastMessage = ms[ms.length - 1];
 				if (lastMessage) lastMessage.content = `Sorry, an error occurred: ${err.message}`;
-				return ms;
+				return [...ms];
 			});
 		} finally {
 			isLoading = false;
@@ -243,11 +228,6 @@
 	}
 
 	onMount(() => {
-		// --- BUG FIX ---
-		// Use setTimeout to push this update to the next cycle of the browser's
-		// event loop. This can resolve stubborn hydration and lifecycle issues by
-		// ensuring the entire page is "settled" before we force the reactive update.
-		// We also create a new array with [...messages] to be certain Svelte sees a change.
 		setTimeout(() => {
 			chatMessages.update((messages) => [...messages]);
 			scrollToBottom();
@@ -279,7 +259,7 @@
 
 <div class="llm-chat-main">
 	<div id="chat-history">
-		{#each $chatMessages as msg (msg)}
+		{#each $chatMessages as msg, i (i)}
 			<div class="llm-message {msg.role}">
 				<ChatMessage message={msg} />
 			</div>
@@ -368,6 +348,7 @@
 </div>
 
 <style>
+	/* All styles are unchanged */
 	.llm-chat-main {
 		height: 100%;
 		display: flex;
@@ -395,7 +376,6 @@
 		padding: 6px 10px;
 		border-radius: 6px;
 		border-bottom-right-radius: 2px;
-		/* --- THIS IS THE FIX --- */
 		width: fit-content;
 	}
 	.llm-message.assistant {
@@ -596,3 +576,4 @@
 		cursor: not-allowed;
 	}
 </style>
+

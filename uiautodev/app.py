@@ -8,10 +8,10 @@ import sys
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-import jedi  # Keep if used, otherwise can be removed if Python completions aren't a focus
+import jedi
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
     FileResponse,
@@ -36,7 +36,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger(__name__)  # Define logger early
+logger = logging.getLogger(__name__)
 
 if not DOTENV_PATH.exists():
     logger.warning(
@@ -47,8 +47,6 @@ if not DOTENV_PATH.exists():
 
 from uiautodev import __version__
 from uiautodev.common import convert_bytes_to_image, ocr_image
-
-# Ensure correct import path if ChatMessageContent from llm_service is LlmServiceChatMessage
 from uiautodev.model import ChatMessageContent as LlmServiceChatMessage
 from uiautodev.model import Node
 from uiautodev.provider import AndroidProvider
@@ -64,6 +62,10 @@ app = FastAPI(
     description="Backend server for the local uiautodev inspection and automation tool.",
     version=__version__,
 )
+
+# --- Global State for Tracking Running Processes ---
+ACTIVE_PROCESSES: Dict[str, int] = {}
+
 
 # --- Static Files Mounting ---
 current_file_dir = Path(__file__).parent
@@ -100,7 +102,7 @@ class InfoResponse(BaseModel):
     drivers: List[str]
 
 
-class ApiChatMessage(BaseModel):  # For frontend<->uiautodev API
+class ApiChatMessage(BaseModel):
     role: str
     content: str
 
@@ -109,7 +111,7 @@ class ApiLlmChatRequest(BaseModel):
     prompt: str
     context: Dict[str, Any] = {}
     history: List[ApiChatMessage] = []
-    provider: Optional[str] = "deepseek"  # ✅ this matches the frontend
+    provider: Optional[str] = "deepseek"
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
 
@@ -127,12 +129,14 @@ class PythonCompletionSuggestion(BaseModel):
     type: Optional[str] = None
 
 
-# --- NEW: Model for Service Configurations ---
 class ServiceConfigResponse(BaseModel):
     ragApiBaseUrl: Optional[str] = None
 
 
-# ------------------------------------------
+# ✅ NEW: Pydantic model for the interrupt request body
+class InterruptRequest(BaseModel):
+    serial: str
+
 
 # --- Python Completion API Endpoint ---
 try:
@@ -143,7 +147,6 @@ try:
     jedi_project = jedi.Project(
         path=jedi_project_path, sys_path=sys.path, smart_sys_path=True
     )
-    # logger.info(f"Jedi Project sys.path: {jedi_project.sys_path}") # Can be verbose
 except Exception as e:
     logger.error(f"Failed to initialize Jedi Project: {e}", exc_info=True)
     jedi_project = None
@@ -179,23 +182,59 @@ async def get_python_completions(request_data: PythonCompletionRequest):
         return []
 
 
+# --- ✅ UPDATED: Interrupt Endpoint ---
+@app.post("/api/python/interrupt", status_code=204)
+async def interrupt_python_execution(request: InterruptRequest):
+    """
+    This endpoint attempts to interrupt a running Python script for a given device.
+    It now correctly receives the serial number from the request body.
+    """
+    serial = request.serial
+    logger.info(f"Received interrupt request for serial: {serial}")
+    pid = ACTIVE_PROCESSES.get(serial)
+
+    if pid is None:
+        logger.warning(f"No active process found for serial {serial} to interrupt.")
+        raise HTTPException(status_code=404, detail="No active process to interrupt.")
+
+    try:
+        if platform.system() == "Windows":
+            os.kill(pid, signal.CTRL_C_EVENT)
+        else:
+            os.kill(pid, signal.SIGINT)
+
+        logger.info(
+            f"Successfully sent interrupt signal to PID: {pid} for serial: {serial}"
+        )
+        del ACTIVE_PROCESSES[serial]
+
+    except ProcessLookupError:
+        logger.warning(
+            f"Process with PID {pid} not found. It may have already terminated."
+        )
+        if serial in ACTIVE_PROCESSES:
+            del ACTIVE_PROCESSES[serial]
+    except Exception as e:
+        logger.error(f"Failed to interrupt process with PID {pid}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to stop the process.")
+
+    return Response(status_code=204)
+
+
 # --- LLM Chat API Endpoint ---
 @app.post("/api/llm/chat")
 async def handle_llm_chat_via_service(
     client_request_data: ApiLlmChatRequest, http_request: Request
 ):
-
     service_history = [
-        ChatMessageContent.model_validate(
-            msg.model_dump()
-        )  # 🔥 converts to correct model
+        ChatMessageContent.model_validate(msg.model_dump())
         for msg in client_request_data.history
     ]
     service_request_data = LlmServiceChatRequest(
         prompt=client_request_data.prompt,
         context=client_request_data.context,
         history=service_history,
-        provider=client_request_data.provider,  # ✅ not model
+        provider=client_request_data.provider,
         temperature=client_request_data.temperature,
         max_tokens=client_request_data.max_tokens,
     )
@@ -212,7 +251,6 @@ async def handle_llm_chat_via_service(
 # --- Core API Endpoints (Info, OCR) ---
 @app.get("/api/info", response_model=InfoResponse)
 def get_application_info() -> InfoResponse:
-    # ... (implementation unchanged) ...
     return InfoResponse(
         version=__version__,
         description="Local uiautodev server.",
@@ -225,7 +263,6 @@ def get_application_info() -> InfoResponse:
 
 @app.post("/api/ocr_image", response_model=List[Node])
 async def perform_ocr_on_image(file: UploadFile = File(...)) -> List[Node]:
-    # ... (implementation unchanged) ...
     try:
         image_data = await file.read()
         image = convert_bytes_to_image(image_data)
@@ -243,7 +280,7 @@ async def perform_ocr_on_image(file: UploadFile = File(...)) -> List[Node]:
                 logger.warning(f"Error closing OCR file: {e_close}")
 
 
-# --- NEW: Endpoint to provide service configurations to frontend ---
+# --- Service Configuration Endpoint ---
 RAG_API_SEARCH_URL_FROM_ENV = os.getenv(
     "COCOINDEX_SEARCH_API_URL", "http://localhost:8000/search"
 )
@@ -260,13 +297,9 @@ async def get_service_configurations():
     return ServiceConfigResponse(ragApiBaseUrl=RAG_API_BASE_URL_FOR_FRONTEND)
 
 
-# --------------------------------------------------------------------
-
-
 # --- Server Control and Static Content ---
 @app.get("/shutdown", summary="Shutdown Server")
 def shutdown_server() -> JSONResponse:
-    # ... (implementation unchanged) ...
     logger.info("Shutdown endpoint called. Sending SIGINT to process %d.", os.getpid())
     os.kill(os.getpid(), signal.SIGINT)
     return JSONResponse(content={"message": "Server shutting down..."})
@@ -274,7 +307,6 @@ def shutdown_server() -> JSONResponse:
 
 @app.get("/demo", summary="Serve Local Inspector UI", include_in_schema=True)
 async def serve_local_inspector_ui():
-    # ... (implementation unchanged) ...
     ui_html_file = static_files_path / "demo.html"
     if not ui_html_file.is_file():
         logger.error(f"UI HTML file not found: {ui_html_file}")
@@ -284,7 +316,6 @@ async def serve_local_inspector_ui():
 
 @app.get("/", summary="Redirect to Local Inspector UI", include_in_schema=False)
 async def redirect_to_local_ui():
-    # ... (implementation unchanged) ...
     try:
         local_ui_url = app.url_path_for("serve_local_inspector_ui")
     except Exception:
@@ -294,7 +325,6 @@ async def redirect_to_local_ui():
 
 # --- Main Entry Point for Uvicorn ---
 if __name__ == "__main__":
-    # Logging is configured at the top of the file now
     server_port = int(os.getenv("UIAUTODEV_PORT", "20242"))
     server_host = os.getenv("UIAUTODEV_HOST", "127.0.0.1")
     reload_enabled = os.getenv("UIAUTODEV_RELOAD", "True").lower() in (
@@ -302,9 +332,7 @@ if __name__ == "__main__":
         "1",
         "yes",
     )
-    log_level_str = os.getenv(
-        "UIAUTODEV_LOG_LEVEL", "info"
-    ).lower()  # Uvicorn's log_level uses this string
+    log_level_str = os.getenv("UIAUTODEV_LOG_LEVEL", "info").lower()
 
     logger.info(
         f"Starting uiautodev server v{__version__} on http://{server_host}:{server_port}"
@@ -323,5 +351,5 @@ if __name__ == "__main__":
         host=server_host,
         port=server_port,
         reload=reload_enabled,
-        log_level=log_level_str,  # Use the string for Uvicorn's log_level
+        log_level=log_level_str,
     )

@@ -6,6 +6,7 @@
 
 	// ─── Stores ──────────────────────────────────────────────────────────────────────────────────
 	import { selectedSerial, selectedNode } from '$lib/stores/uiagent';
+	import { pythonConsoleStore } from '$lib/stores/pythonConsole'; // ✅ Import the console store
 	import {
 		hierarchy,
 		isLoadingHierarchy,
@@ -20,6 +21,7 @@
 	import PropertiesPanel from '$lib/components/PropertiesPanel.svelte';
 	import PythonConsole from '$lib/components/PythonConsole.svelte';
 	import HierarchyTree from '$lib/components/HierarchyTree.svelte';
+	import ConsoleOutput from '$lib/components/ConsoleOutput.svelte'; // ✅ Import the new floating console
 
 	// ─── Component State ─────────────────────────────────────────────────────────────────────────
 
@@ -58,8 +60,8 @@
 		}
 		return false;
 	}
-	
-    /**
+
+	/**
 	 * Helper function to find a node by its key from the root.
 	 */
 	function findNodeByKey(node: NodeInfo, key: string): NodeInfo | null {
@@ -314,7 +316,7 @@
 	.tab-content {
 		flex: 1;
 		overflow: auto;
-		padding: 1rem;
+		padding: 0; /* Changed from 1rem to 0 to allow components to control their own padding */
 		display: flex;
 		flex-direction: column;
 	}
@@ -410,7 +412,7 @@
 					Element Details
 				</button>
 			</div>
-			<div class="tab-content">
+			<div class="panel-content">
 				{#if midTab === 'assistant'}
 					<LLMAssistant
 						{getAppVariables}
@@ -445,9 +447,8 @@
 			</div>
 			<div class="panel-content">
 				{#if rightTab === 'python'}
-					<div class="tab-content" style="padding: 1rem;">
-						<PythonConsole serial={$selectedSerial} />
-					</div>
+					<!-- The PythonConsole no longer needs extra padding -->
+					<PythonConsole serial={$selectedSerial} />
 				{:else}
 					{#if $isLoadingHierarchy}
 						<p style="padding: 1rem; color: #888;">Loading UI hierarchy…</p>
@@ -488,4 +489,10 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- ✅ Floating Console Output: Rendered here, on top of everything else. -->
+	{#if $pythonConsoleStore.isOpen}
+		<ConsoleOutput />
+	{/if}
 </main>
+

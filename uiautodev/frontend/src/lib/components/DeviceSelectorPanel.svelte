@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	// ✅ FIX: The `get` function is removed from the import as it's not needed in Svelte 5.
 	import { devices, selectedSerial, type DeviceInfo } from '$lib/stores/uiagent';
-
-	// 1. IMPORT our new refresh function from the store.
+	
+	import { refreshHierarchy } from '$lib/stores/hierarchy';
 	import { refreshScreenshot } from '$lib/stores/screenshot';
 
 	let isLoading = true;
@@ -16,6 +17,7 @@
 			})
 			.then((data: DeviceInfo[]) => {
 				devices.set(data);
+				// ✅ FIX: Use the reactive `$selectedSerial` syntax to get the store's current value.
 				if (data.length > 0 && !$selectedSerial) {
 					selectedSerial.set(data[0].serial);
 				}
@@ -33,48 +35,15 @@
 	function onDeviceChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
 		selectedSerial.set(target.value);
-		// 2. (Good Practice) Also trigger a refresh when the device is changed.
+
+		// When the device changes, refresh both hierarchy and screenshot for consistency.
+		refreshHierarchy();
 		refreshScreenshot();
 	}
 </script>
 
 <style>
-	/* 3. ADD these new styles for the button and its wrapper. */
-	.device-selector-wrapper {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.refresh-btn {
-		background: transparent;
-		border: 1px solid #444;
-		color: #ccc;
-		padding: 0.25rem;
-		border-radius: 4px;
-		cursor: pointer;
-		line-height: 1;
-		font-size: 1.1rem;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition:
-			background-color 0.2s,
-			border-color 0.2s;
-	}
-	.refresh-btn:hover:not(:disabled) {
-		background-color: #3e3e3e;
-		border-color: #666;
-	}
-	.refresh-btn:active:not(:disabled) {
-		background-color: #2a2a2a;
-	}
-	.refresh-btn:disabled {
-		color: #666;
-		cursor: not-allowed;
-	}
-
-	/* No changes needed to existing styles below. */
+	/* All styles for the wrapper and refresh button have been removed. */
 	select {
 		min-width: 150px;
 		padding: 0.25rem 0.5rem;
@@ -101,37 +70,28 @@
 	}
 </style>
 
+<!-- The template is now simplified, containing only the error display or the select dropdown. -->
 {#if error}
 	<span class="error-text">{error}</span>
 {:else}
-	<div class="device-selector-wrapper">
-		<select
-			id="device-select"
-			value={$selectedSerial}
-			on:change={onDeviceChange}
-			disabled={isLoading || $devices.length === 0}
-			aria-label="Select Device"
-		>
-			{#if isLoading}
-				<option value="" disabled>Loading…</option>
-			{:else if $devices.length > 0}
-				{#each $devices as device (device.serial)}
-					<option value={device.serial}>
-						{device.serial}{device.model ? ` (${device.model})` : ''}
-					</option>
-				{/each}
-			{:else}
-				<option value="" disabled>No devices found</option>
-			{/if}
-		</select>
-
-		<button
-			class="refresh-btn"
-			on:click={refreshScreenshot}
-			disabled={!$selectedSerial || isLoading}
-			title="Refresh Screenshot"
-		>
-			🔄
-		</button>
-	</div>
+	<select
+		id="device-select"
+		bind:value={$selectedSerial}
+		on:change={onDeviceChange}
+		disabled={isLoading || $devices.length === 0}
+		aria-label="Select Device"
+	>
+		{#if isLoading}
+			<option value="" disabled>Loading…</option>
+		{:else if $devices.length > 0}
+			{#each $devices as device (device.serial)}
+				<option value={device.serial}>
+					{device.serial}{device.model ? ` (${device.model})` : ''}
+				</option>
+			{/each}
+		{:else}
+			<option value="" disabled>No devices found</option>
+		{/if}
+	</select>
 {/if}
+
